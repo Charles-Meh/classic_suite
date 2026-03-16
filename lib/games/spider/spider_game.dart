@@ -6,6 +6,8 @@ import 'package:playing_cards/playing_cards.dart';
 import '../klondike/card_model.dart';
 import 'spider_advisor.dart';
 import 'spider_game_state.dart';
+import 'spider_stats.dart';
+import 'spider_stats_store.dart';
 
 class SpiderGame extends StatefulWidget {
   const SpiderGame({super.key, this.initialState});
@@ -20,14 +22,39 @@ class _SpiderGameState extends State<SpiderGame> {
   late SpiderGameState state;
   late SpiderGameState _initialDealState;
   final List<SpiderGameState> _history = [];
+  final List<SpiderGameState> _redoHistory = [];
+  final SpiderStatsStore _statsStore = SpiderStatsStore();
   _ActiveSpiderDrag? _activeTableauDrag;
   SpiderSuggestion? _activeHint;
+  SpiderStats _stats = const SpiderStats();
+  bool _hasRecordedCurrentWin = false;
 
   @override
   void initState() {
     super.initState();
     state = widget.initialState ?? SpiderGameState();
     _initialDealState = state.copy();
+    _hasRecordedCurrentWin = state.isWon;
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final loaded = await _statsStore.load();
+    if (!mounted) {
+      return;
+    }
+
+    final nextStats = widget.initialState == null
+        ? loaded.recordDealStarted()
+        : loaded;
+    await _statsStore.save(nextStats);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _stats = nextStats;
+    });
   }
 
   bool _applySuggestion(SpiderSuggestion suggestion) {
@@ -50,6 +77,7 @@ class _SpiderGameState extends State<SpiderGame> {
 
   void _recordHistory() {
     _history.add(state.copy());
+    _redoHistory.clear();
   }
 
   bool _runRecordedMutation(bool Function() mutation) {
@@ -63,7 +91,34 @@ class _SpiderGameState extends State<SpiderGame> {
       _activeHint = null;
       _activeTableauDrag = null;
     });
+    if (changed) {
+      _maybeRecordWin();
+    }
     return changed;
+  }
+
+  void _maybeRecordWin() {
+    if (_hasRecordedCurrentWin || !state.isWon) {
+      return;
+    }
+    _hasRecordedCurrentWin = true;
+    final nextStats = _stats.recordWin();
+    setState(() {
+      _stats = nextStats;
+    });
+    _statsStore.save(nextStats);
+  }
+
+  void _recordStartedDeal({required bool resetStreak}) {
+    var nextStats = _stats;
+    if (resetStreak) {
+      nextStats = nextStats.recordAbandonedDeal();
+    }
+    nextStats = nextStats.recordDealStarted();
+    setState(() {
+      _stats = nextStats;
+    });
+    _statsStore.save(nextStats);
   }
 
   void _handleStockTap() {
@@ -86,10 +141,26 @@ class _SpiderGameState extends State<SpiderGame> {
       return;
     }
     setState(() {
+      _redoHistory.add(state.copy());
       final previous = _history.removeLast();
       state.restoreFrom(previous);
       _activeHint = null;
       _activeTableauDrag = null;
+      _hasRecordedCurrentWin = state.isWon;
+    });
+  }
+
+  void _redoMove() {
+    if (_redoHistory.isEmpty) {
+      return;
+    }
+    setState(() {
+      _history.add(state.copy());
+      final next = _redoHistory.removeLast();
+      state.restoreFrom(next);
+      _activeHint = null;
+      _activeTableauDrag = null;
+      _hasRecordedCurrentWin = state.isWon;
     });
   }
 
@@ -97,12 +168,15 @@ class _SpiderGameState extends State<SpiderGame> {
     setState(() {
       state.restoreFrom(_initialDealState);
       _history.clear();
+      _redoHistory.clear();
       _activeHint = null;
       _activeTableauDrag = null;
+      _hasRecordedCurrentWin = state.isWon;
     });
   }
 
   void _dealNewGame({int? suitMode}) {
+    final shouldResetStreak = !state.isWon && _history.isNotEmpty;
     setState(() {
       if (suitMode != null) {
         state.suitMode = suitMode;
@@ -110,9 +184,12 @@ class _SpiderGameState extends State<SpiderGame> {
       state.dealNewGame();
       _initialDealState = state.copy();
       _history.clear();
+      _redoHistory.clear();
       _activeHint = null;
       _activeTableauDrag = null;
+      _hasRecordedCurrentWin = false;
     });
+    _recordStartedDeal(resetStreak: shouldResetStreak);
   }
 
   void _showHint() {
@@ -129,7 +206,7 @@ class _SpiderGameState extends State<SpiderGame> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Spider Klondike settings'),
+              title: const Text('Spider settings'),
               content: SizedBox(
                 width: 360,
                 child: RadioGroup<int>(
@@ -150,7 +227,7 @@ class _SpiderGameState extends State<SpiderGame> {
                         contentPadding: EdgeInsets.zero,
                         title: Text('1-suit'),
                         subtitle: Text(
-                          'Best first mode for a clean, winnable MVP.',
+                          'Classic beginner mode. Fastest wins and easiest planning.',
                         ),
                       ),
                       RadioListTile<int>(
@@ -190,12 +267,111 @@ class _SpiderGameState extends State<SpiderGame> {
     _dealNewGame(suitMode: result);
   }
 
+  Future<void> _openStatistics() async {
+    if (!mounted) {
+      return;
+    }
+    final percent = (_stats.winRate * 100).round();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Spider statistics'),
+          content: SizedBox(
+            width: 340,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatTile(
+                        label: 'Deals',
+                        value: '${_stats.dealsStarted}',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildStatTile(
+                        label: 'Wins',
+                        value: '${_stats.wins}',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatTile(
+                        label: 'Win rate',
+                        value: '$percent%',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildStatTile(
+                        label: 'Best streak',
+                        value: '${_stats.bestStreak}',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _buildStatTile(
+                  label: 'Current streak',
+                  value: '${_stats.currentStreak}',
+                  fullWidth: true,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatTile({
+    required String label,
+    required String value,
+    bool fullWidth = false,
+  }) {
+    return Container(
+      width: fullWidth ? double.infinity : null,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _handleMenuAction(_SpiderMenuAction action) {
     switch (action) {
       case _SpiderMenuAction.newDeal:
         _dealNewGame();
       case _SpiderMenuAction.restartDeal:
         _restartDeal();
+      case _SpiderMenuAction.statistics:
+        _openStatistics();
       case _SpiderMenuAction.settings:
         _openSettings();
     }
@@ -842,7 +1018,7 @@ class _SpiderGameState extends State<SpiderGame> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Spider Klondike'),
+        title: const Text('Spider Solitaire'),
         actions: [
           IconButton(
             tooltip: 'Hint',
@@ -853,6 +1029,11 @@ class _SpiderGameState extends State<SpiderGame> {
             tooltip: 'Undo',
             onPressed: _history.isEmpty ? null : _undoMove,
             icon: const Icon(Icons.undo),
+          ),
+          IconButton(
+            tooltip: 'Redo',
+            onPressed: _redoHistory.isEmpty ? null : _redoMove,
+            icon: const Icon(Icons.redo),
           ),
           PopupMenuButton<_SpiderMenuAction>(
             tooltip: 'Game menu',
@@ -865,6 +1046,10 @@ class _SpiderGameState extends State<SpiderGame> {
               PopupMenuItem<_SpiderMenuAction>(
                 value: _SpiderMenuAction.restartDeal,
                 child: Text('Restart deal'),
+              ),
+              PopupMenuItem<_SpiderMenuAction>(
+                value: _SpiderMenuAction.statistics,
+                child: Text('Statistics'),
               ),
               PopupMenuItem<_SpiderMenuAction>(
                 value: _SpiderMenuAction.settings,
@@ -935,6 +1120,14 @@ class _SpiderGameState extends State<SpiderGame> {
                             'Runs ${state.completedRuns.length}/8',
                             icon: Icons.verified_outlined,
                           ),
+                          _buildStatusChip(
+                            'Moves ${_history.length}',
+                            icon: Icons.swipe_outlined,
+                          ),
+                          _buildStatusChip(
+                            'Wins ${_stats.wins} • Streak ${_stats.currentStreak}',
+                            icon: Icons.emoji_events_outlined,
+                          ),
                         ],
                       ),
                       AnimatedSize(
@@ -996,7 +1189,7 @@ class _ActiveSpiderDrag {
   int get hashCode => Object.hash(pileIndex, startIndex);
 }
 
-enum _SpiderMenuAction { newDeal, restartDeal, settings }
+enum _SpiderMenuAction { newDeal, restartDeal, statistics, settings }
 
 enum _HintRole { none, source, target }
 

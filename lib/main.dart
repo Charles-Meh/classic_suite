@@ -23,8 +23,8 @@ class ClassicSuiteApp extends StatelessWidget {
       ),
       home: GameListPage(
         games: const [
-          GameDefinition(title: 'Klondike Klondike', builder: _buildKlondike),
-          GameDefinition(title: 'Spider Klondike', builder: _buildSpider),
+          GameDefinition(title: 'Klondike Solitaire', builder: _buildKlondike),
+          GameDefinition(title: 'Spider Solitaire', builder: _buildSpider),
           GameDefinition(title: 'FreeCell', builder: _buildFreeCell),
           GameDefinition(title: 'Sudoku', builder: _buildSudoku),
         ],
