@@ -1,0 +1,22 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+build/
+
+# IDEs
+.idea/
+.vscode/
+
+# Platform / tool noise
+.DS_Store
+*.log
+
+# Generated files
+android/.gradle/
+ios/Flutter/ephemeral/
+linux/flutter/ephemeral/
+macos/Flutter/ephemeral/
+windows/flutter/ephemeral/
