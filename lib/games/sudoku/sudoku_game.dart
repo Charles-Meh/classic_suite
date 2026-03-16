@@ -17,19 +17,27 @@ class _SudokuGameState extends State<SudokuGame> {
   late SudokuGameState state;
   bool _loading = true;
   bool _saving = false;
-  int _puzzleCursor = 0;
+  bool _noteMode = false;
+  SudokuDifficulty _selectedDifficulty = SudokuDifficulty.easy;
+  int _difficultyCursor = 0;
 
   @override
   void initState() {
     super.initState();
     state = widget.initialState?.copy() ?? SudokuGameState();
-    _puzzleCursor = SudokuGameState.puzzles.indexWhere(
+    _selectedDifficulty = state.difficulty;
+    _syncDifficultyCursor();
+    _loadSavedState();
+  }
+
+  void _syncDifficultyCursor() {
+    final pool = SudokuGameState.puzzlesByDifficulty(_selectedDifficulty);
+    _difficultyCursor = pool.indexWhere(
       (puzzle) => puzzle.id == state.puzzleId,
     );
-    if (_puzzleCursor < 0) {
-      _puzzleCursor = 0;
+    if (_difficultyCursor < 0) {
+      _difficultyCursor = 0;
     }
-    _loadSavedState();
   }
 
   Future<void> _loadSavedState() async {
@@ -45,12 +53,8 @@ class _SudokuGameState extends State<SudokuGame> {
     setState(() {
       if (loaded != null) {
         state = loaded;
-        _puzzleCursor = SudokuGameState.puzzles.indexWhere(
-          (puzzle) => puzzle.id == state.puzzleId,
-        );
-        if (_puzzleCursor < 0) {
-          _puzzleCursor = 0;
-        }
+        _selectedDifficulty = state.difficulty;
+        _syncDifficultyCursor();
       }
       _loading = false;
     });
@@ -74,10 +78,29 @@ class _SudokuGameState extends State<SudokuGame> {
   }
 
   Future<void> _newPuzzle() async {
+    final pool = SudokuGameState.puzzlesByDifficulty(_selectedDifficulty);
+    final nextIndex = (pool.isEmpty
+        ? 0
+        : (_difficultyCursor + 1) % pool.length);
+
     setState(() {
-      _puzzleCursor = (_puzzleCursor + 1) % SudokuGameState.puzzles.length;
-      state = SudokuGameState(puzzleIndex: _puzzleCursor);
-      state.message = 'Fresh board loaded.';
+      _difficultyCursor = nextIndex;
+      state = SudokuGameState(
+        puzzleIndex: nextIndex,
+        difficulty: _selectedDifficulty,
+      );
+      state.message =
+          'Fresh ${_selectedDifficulty.label.toLowerCase()} board loaded.';
+    });
+    await _persistState();
+  }
+
+  Future<void> _setDifficulty(SudokuDifficulty difficulty) async {
+    setState(() {
+      _selectedDifficulty = difficulty;
+      _difficultyCursor = 0;
+      state = SudokuGameState(puzzleIndex: 0, difficulty: difficulty);
+      state.message = '${difficulty.label} puzzle loaded.';
     });
     await _persistState();
   }
@@ -119,19 +142,19 @@ class _SudokuGameState extends State<SudokuGame> {
 
     setState(() {
       state = loaded;
-      _puzzleCursor = SudokuGameState.puzzles.indexWhere(
-        (puzzle) => puzzle.id == state.puzzleId,
-      );
-      if (_puzzleCursor < 0) {
-        _puzzleCursor = 0;
-      }
+      _selectedDifficulty = state.difficulty;
+      _syncDifficultyCursor();
     });
     _showSnack('Saved game restored.');
   }
 
-  Future<void> _handleValueInput(int value) async {
+  Future<void> _handleDigitInput(int value) async {
     setState(() {
-      state.setSelectedValue(value);
+      if (_noteMode) {
+        state.toggleNoteForSelection(value);
+      } else {
+        state.setSelectedValue(value);
+      }
     });
     await _persistState();
   }
@@ -139,6 +162,41 @@ class _SudokuGameState extends State<SudokuGame> {
   Future<void> _handleClear() async {
     setState(() {
       state.clearSelectedCell();
+    });
+    await _persistState();
+  }
+
+  Future<void> _handleUndo() async {
+    setState(() {
+      state.undo();
+    });
+    await _persistState();
+  }
+
+  Future<void> _handleRedo() async {
+    setState(() {
+      state.redo();
+    });
+    await _persistState();
+  }
+
+  Future<void> _handleHint() async {
+    setState(() {
+      state.applyHint();
+    });
+    await _persistState();
+  }
+
+  Future<void> _fillSelectionNotes() async {
+    setState(() {
+      state.fillPencilMarksForSelection();
+    });
+    await _persistState();
+  }
+
+  Future<void> _fillAllNotes() async {
+    setState(() {
+      state.autoFillAllPencilMarks();
     });
     await _persistState();
   }
@@ -173,7 +231,7 @@ class _SudokuGameState extends State<SudokuGame> {
                                 ? constraints.maxWidth - 8
                                 : minValue(
                                     constraints.maxWidth - 8,
-                                    constraints.maxHeight - 290,
+                                    constraints.maxHeight - 360,
                                   ))
                             .clamp(260.0, 520.0)
                             .toDouble();
@@ -187,7 +245,17 @@ class _SudokuGameState extends State<SudokuGame> {
                         final label = event.character;
                         if (label != null &&
                             RegExp(r'^[1-9]$').hasMatch(label)) {
-                          _handleValueInput(int.parse(label));
+                          _handleDigitInput(int.parse(label));
+                          return KeyEventResult.handled;
+                        }
+                        if (label == 'n' || label == 'N') {
+                          setState(() {
+                            _noteMode = !_noteMode;
+                          });
+                          return KeyEventResult.handled;
+                        }
+                        if (label == 'h' || label == 'H') {
+                          _handleHint();
                           return KeyEventResult.handled;
                         }
                         if (event.logicalKey == LogicalKeyboardKey.backspace ||
@@ -219,6 +287,7 @@ class _SudokuGameState extends State<SudokuGame> {
                                 spacing: 12,
                                 runSpacing: 8,
                                 children: [
+                                  _statChip(state.difficulty.label),
                                   _statChip('${state.givensCount} givens'),
                                   _statChip('${state.remainingCount} open'),
                                   _statChip(
@@ -232,6 +301,8 @@ class _SudokuGameState extends State<SudokuGame> {
                                 ],
                               ),
                               const SizedBox(height: 16),
+                              _difficultyPicker(),
+                              const SizedBox(height: 16),
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
@@ -239,6 +310,13 @@ class _SudokuGameState extends State<SudokuGame> {
                                       ? const Color(0xFFE3F4E9)
                                       : Colors.white.withValues(alpha: 0.85),
                                   borderRadius: BorderRadius.circular(16),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x14000000),
+                                      blurRadius: 12,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
                                 child: Text(
                                   state.message,
@@ -251,6 +329,8 @@ class _SudokuGameState extends State<SudokuGame> {
                                   ),
                                 ),
                               ),
+                              const SizedBox(height: 12),
+                              _selectionSummary(),
                               const SizedBox(height: 18),
                               Center(
                                 child: SizedBox(
@@ -282,6 +362,8 @@ class _SudokuGameState extends State<SudokuGame> {
                                 ),
                               ),
                               const SizedBox(height: 18),
+                              _buildModeAndActionBar(),
+                              const SizedBox(height: 12),
                               _buildPad(),
                               const SizedBox(height: 16),
                               Wrap(
@@ -313,7 +395,7 @@ class _SudokuGameState extends State<SudokuGame> {
                               ),
                               const SizedBox(height: 12),
                               const Text(
-                                'Tap a square, then use the keypad or keyboard digits 1-9. Use Clear, Delete, or 0 to erase.',
+                                'Tap a square, then use digits 1-9. Press N for notes, H for a hint, and Clear/Delete/0 to erase.',
                                 textAlign: TextAlign.center,
                               ),
                             ],
@@ -324,6 +406,67 @@ class _SudokuGameState extends State<SudokuGame> {
                   },
                 ),
         ),
+      ),
+    );
+  }
+
+  Widget _difficultyPicker() {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final difficulty in SudokuDifficulty.values)
+          ChoiceChip(
+            key: Key('sudoku_difficulty_${difficulty.name}'),
+            label: Text(difficulty.label),
+            selected: _selectedDifficulty == difficulty,
+            onSelected: (selected) {
+              if (!selected || _selectedDifficulty == difficulty) {
+                return;
+              }
+              _setDifficulty(difficulty);
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _selectionSummary() {
+    if (!state.hasSelection) {
+      return const Text('Select a cell to place values or pencil marks.');
+    }
+
+    final row = state.selectedRow!;
+    final col = state.selectedCol!;
+    final value = state.board[row][col];
+    final notes = state.notesForCell(row, col).toList()..sort();
+    final candidates = state.candidatesForCell(row, col).toList()..sort();
+
+    String summary;
+    if (state.isGiven(row, col)) {
+      summary = 'Row ${row + 1}, column ${col + 1} is a locked clue.';
+    } else if (value != 0) {
+      summary = 'Row ${row + 1}, column ${col + 1} = $value.';
+    } else if (notes.isNotEmpty) {
+      summary = 'Row ${row + 1}, column ${col + 1} notes: ${notes.join(', ')}.';
+    } else if (candidates.isNotEmpty) {
+      summary =
+          'Row ${row + 1}, column ${col + 1} candidates: ${candidates.join(', ')}.';
+    } else {
+      summary = 'Row ${row + 1}, column ${col + 1} has no legal candidates.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        summary,
+        key: const Key('sudoku_selection_summary'),
+        textAlign: TextAlign.center,
       ),
     );
   }
@@ -345,6 +488,59 @@ class _SudokuGameState extends State<SudokuGame> {
     );
   }
 
+  Widget _buildModeAndActionBar() {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        FilterChip(
+          key: const Key('sudoku_note_mode'),
+          label: Text(_noteMode ? 'Pencil mode on' : 'Pencil mode off'),
+          avatar: const Icon(Icons.edit_note),
+          selected: _noteMode,
+          onSelected: state.completed
+              ? null
+              : (selected) {
+                  setState(() {
+                    _noteMode = selected;
+                  });
+                },
+        ),
+        OutlinedButton.icon(
+          key: const Key('sudoku_hint'),
+          onPressed: state.completed ? null : _handleHint,
+          icon: const Icon(Icons.lightbulb_outline),
+          label: const Text('Hint'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('sudoku_fill_notes'),
+          onPressed: state.completed ? null : _fillSelectionNotes,
+          icon: const Icon(Icons.grid_view_rounded),
+          label: const Text('Cell notes'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('sudoku_fill_all_notes'),
+          onPressed: state.completed ? null : _fillAllNotes,
+          icon: const Icon(Icons.auto_fix_high),
+          label: const Text('All notes'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('sudoku_undo'),
+          onPressed: state.canUndo ? _handleUndo : null,
+          icon: const Icon(Icons.undo),
+          label: const Text('Undo'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('sudoku_redo'),
+          onPressed: state.canRedo ? _handleRedo : null,
+          icon: const Icon(Icons.redo),
+          label: const Text('Redo'),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPad() {
     final invalid = state.invalidValuesForSelection();
     return Wrap(
@@ -360,10 +556,12 @@ class _SudokuGameState extends State<SudokuGame> {
               key: Key('sudoku_digit_$value'),
               onPressed: state.completed
                   ? null
-                  : () => _handleValueInput(value),
+                  : () => _handleDigitInput(value),
               style: FilledButton.styleFrom(
                 backgroundColor: invalid.contains(value)
                     ? const Color(0xFF9C4237)
+                    : _noteMode
+                    ? const Color(0xFF4F5FA8)
                     : null,
               ),
               child: Text('$value'),
@@ -449,18 +647,60 @@ class _SudokuGameState extends State<SudokuGame> {
             ),
           ),
         ),
-        child: Text(
-          value == 0 ? '' : '$value',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: given ? FontWeight.w800 : FontWeight.w700,
-            color: conflict
-                ? const Color(0xFF8E1B10)
-                : given
-                ? const Color(0xFF1C2A3D)
-                : const Color(0xFF0D47A1),
-          ),
-        ),
+        child: value == 0
+            ? _buildNotes(row, col)
+            : _buildValue(value, given, conflict),
+      ),
+    );
+  }
+
+  Widget _buildValue(int value, bool given, bool conflict) {
+    return Text(
+      '$value',
+      style: TextStyle(
+        fontSize: 20,
+        fontWeight: given ? FontWeight.w800 : FontWeight.w700,
+        color: conflict
+            ? const Color(0xFF8E1B10)
+            : given
+            ? const Color(0xFF1C2A3D)
+            : const Color(0xFF0D47A1),
+      ),
+    );
+  }
+
+  Widget _buildNotes(int row, int col) {
+    final notes = state.notesForCell(row, col);
+    return Padding(
+      padding: const EdgeInsets.all(3),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          for (int group = 0; group < 3; group++)
+            Expanded(
+              child: Row(
+                children: [
+                  for (int offset = 1; offset <= 3; offset++)
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          notes.contains(group * 3 + offset)
+                              ? '${group * 3 + offset}'
+                              : '',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(
+                              0xFF5A6783,
+                            ).withValues(alpha: 0.95),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
