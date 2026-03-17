@@ -26,7 +26,9 @@ class TriPeaksStats {
     return copyWith(
       gamesWon: gamesWon + 1,
       currentStreak: nextCurrentStreak,
-      bestStreak: nextCurrentStreak > bestStreak ? nextCurrentStreak : bestStreak,
+      bestStreak: nextCurrentStreak > bestStreak
+          ? nextCurrentStreak
+          : bestStreak,
       bestScore: score > bestScore ? score : bestScore,
       longestRunEver: longestRun > longestRunEver ? longestRun : longestRunEver,
     );

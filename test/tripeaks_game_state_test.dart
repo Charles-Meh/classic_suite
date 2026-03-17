@@ -15,7 +15,10 @@ void main() {
     expect(state.stock, hasLength(23));
     expect(state.waste, hasLength(1));
     expect(state.exposedIndexes, hasLength(10));
-    expect(state.exposedIndexes, equals([18, 19, 20, 21, 22, 23, 24, 25, 26, 27]));
+    expect(
+      state.exposedIndexes,
+      equals([18, 19, 20, 21, 22, 23, 24, 25, 26, 27]),
+    );
   });
 
   test('top cards stay blocked until both children are removed', () {
@@ -35,7 +38,11 @@ void main() {
     final afterOne = state.copyWith(tableau: [...tableau]..[3] = null);
     expect(afterOne.isExposed(0), isFalse);
 
-    final afterTwo = state.copyWith(tableau: [...tableau]..[3] = null..[4] = null);
+    final afterTwo = state.copyWith(
+      tableau: [...tableau]
+        ..[3] = null
+        ..[4] = null,
+    );
     expect(afterTwo.isExposed(0), isTrue);
   });
 
@@ -89,9 +96,9 @@ void main() {
   });
 
   test('encode and decode round-trip preserves state', () {
-    final original = TriPeaksGameState.newGame(seed: 42)
-        .withElapsedSeconds(31)
-        .togglePaused();
+    final original = TriPeaksGameState.newGame(
+      seed: 42,
+    ).withElapsedSeconds(31).togglePaused();
 
     final decoded = TriPeaksGameState.tryDecode(original.encode());
 

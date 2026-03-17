@@ -4,8 +4,14 @@ class HeartsAi {
   static List<HeartsCard> choosePassCards(HeartsGameState state, int player) {
     final hand = [...state.hands[player]];
     final shootMoon = _shouldShootMoon(state, player);
-    hand.sort((a, b) => _passPriority(state, player, b, shootMoon)
-        .compareTo(_passPriority(state, player, a, shootMoon)));
+    hand.sort(
+      (a, b) => _passPriority(
+        state,
+        player,
+        b,
+        shootMoon,
+      ).compareTo(_passPriority(state, player, a, shootMoon)),
+    );
     return hand.take(3).toList();
   }
 
@@ -20,7 +26,9 @@ class HeartsAi {
       if (state.isFirstTrick) {
         return legal.single;
       }
-      return shootMoon ? _leadForMoon(legal) : _leadDefensively(state, player, legal);
+      return shootMoon
+          ? _leadForMoon(legal)
+          : _leadDefensively(state, player, legal);
     }
 
     final leadSuit = state.currentTrick.first.card.suit;
@@ -58,19 +66,19 @@ class HeartsAi {
       cards.sort((a, b) => a.rank.compareTo(b.rank));
     }
 
-    final safeSuits = bySuit.entries.where((entry) {
-      if (entry.key != HeartsSuit.spades) {
-        return true;
-      }
-      return !state.hands[player].any((card) => card.isQueenOfSpades);
-    }).toList()
-      ..sort((a, b) {
-        final lengthCompare = b.value.length.compareTo(a.value.length);
-        if (lengthCompare != 0) {
-          return lengthCompare;
-        }
-        return a.value.first.rank.compareTo(b.value.first.rank);
-      });
+    final safeSuits =
+        bySuit.entries.where((entry) {
+          if (entry.key != HeartsSuit.spades) {
+            return true;
+          }
+          return !state.hands[player].any((card) => card.isQueenOfSpades);
+        }).toList()..sort((a, b) {
+          final lengthCompare = b.value.length.compareTo(a.value.length);
+          if (lengthCompare != 0) {
+            return lengthCompare;
+          }
+          return a.value.first.rank.compareTo(b.value.first.rank);
+        });
 
     if (safeSuits.isNotEmpty) {
       return safeSuits.first.value.first;
@@ -101,13 +109,17 @@ class HeartsAi {
     final sorted = [...legal]..sort((a, b) => a.rank.compareTo(b.rank));
     final winningRank = _currentWinningRank(state);
     final losing = sorted.where((card) => card.rank < winningRank).toList();
-    final trickPoints = state.currentTrick.fold<int>(0, (sum, play) => sum + play.card.pointValue);
+    final trickPoints = state.currentTrick.fold<int>(
+      0,
+      (sum, play) => sum + play.card.pointValue,
+    );
 
     if (losing.isNotEmpty) {
       return losing.last;
     }
 
-    if (trickPoints > 0 || state.currentTrick.first.card.suit == HeartsSuit.spades) {
+    if (trickPoints > 0 ||
+        state.currentTrick.first.card.suit == HeartsSuit.spades) {
       return sorted.first;
     }
     return sorted.last;
@@ -118,7 +130,10 @@ class HeartsAi {
     return sorted.first;
   }
 
-  static HeartsCard _discardDefensively(HeartsGameState state, List<HeartsCard> legal) {
+  static HeartsCard _discardDefensively(
+    HeartsGameState state,
+    List<HeartsCard> legal,
+  ) {
     final queen = legal.where((card) => card.isQueenOfSpades).toList();
     if (queen.isNotEmpty) {
       return queen.first;
@@ -130,10 +145,9 @@ class HeartsAi {
       return hearts.first;
     }
 
-    final highSpades = legal
-        .where((card) => card.suit == HeartsSuit.spades)
-        .toList()
-      ..sort((a, b) => b.rank.compareTo(a.rank));
+    final highSpades =
+        legal.where((card) => card.suit == HeartsSuit.spades).toList()
+          ..sort((a, b) => b.rank.compareTo(a.rank));
     if (highSpades.isNotEmpty) {
       return highSpades.first;
     }
@@ -218,7 +232,9 @@ class HeartsAi {
     if (card.isHeart) {
       value += 90 + (card.rank * 10);
     }
-    final suitCount = state.hands[player].where((item) => item.suit == card.suit).length;
+    final suitCount = state.hands[player]
+        .where((item) => item.suit == card.suit)
+        .length;
     if (suitCount == 1) {
       value += 35;
     } else if (suitCount == 2) {

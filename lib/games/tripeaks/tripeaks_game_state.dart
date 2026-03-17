@@ -26,10 +26,7 @@ class TriPeaksCard {
   final bool faceUp;
 
   TriPeaksCard copyWith({PlayingCard? card, bool? faceUp}) {
-    return TriPeaksCard(
-      card: card ?? this.card,
-      faceUp: faceUp ?? this.faceUp,
-    );
+    return TriPeaksCard(card: card ?? this.card, faceUp: faceUp ?? this.faceUp);
   }
 
   int get rank => switch (card.value) {
@@ -234,7 +231,8 @@ class TriPeaksGameState {
         (value) => value.name == (json['status'] as String? ?? 'active'),
         orElse: () => TriPeaksStatus.active,
       ),
-      message: json['message'] as String? ??
+      message:
+          json['message'] as String? ??
           'Clear the peaks by matching one rank up or down.',
       seed: (json['seed'] as num?)?.toInt() ?? 0,
     );
@@ -291,7 +289,8 @@ class TriPeaksGameState {
 
   List<int> get exposedIndexes => [
     for (final position in layout)
-      if (tableau[position.index] != null && isExposed(position.index)) position.index,
+      if (tableau[position.index] != null && isExposed(position.index))
+        position.index,
   ];
 
   bool isExposed(int index) {
@@ -309,7 +308,10 @@ class TriPeaksGameState {
 
   bool isValidMove(int index) {
     final card = tableau[index];
-    if (card == null || !isExposed(index) || status != TriPeaksStatus.active || paused) {
+    if (card == null ||
+        !isExposed(index) ||
+        status != TriPeaksStatus.active ||
+        paused) {
       return false;
     }
     return ranksAreAdjacent(card.rank, wasteTop.rank);
@@ -435,7 +437,9 @@ class TriPeaksGameState {
       return null;
     }
     try {
-      return TriPeaksGameState.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      return TriPeaksGameState.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
     } catch (_) {
       return null;
     }

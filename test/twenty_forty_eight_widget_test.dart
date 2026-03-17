@@ -158,7 +158,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('2048_continue')), findsNothing);
 
-    await tester.tap(find.byTooltip('Game menu'));
+    await tester.tap(find.byTooltip('Game menu').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Statistics'));
     await tester.pumpAndSettle();

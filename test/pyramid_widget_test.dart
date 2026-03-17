@@ -161,7 +161,7 @@ void main() {
     await tester.tap(find.text('New game'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Game menu'));
+    await tester.tap(find.byTooltip('Game menu').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Statistics').last);
     await tester.pumpAndSettle();

@@ -96,8 +96,8 @@ void main() {
 
     expect(find.text('Red wins.'), findsOneWidget);
 
-    await tester.ensureVisible(find.byTooltip('Game menu'));
-    await tester.tap(find.byTooltip('Game menu'));
+    await tester.ensureVisible(find.byTooltip('Game menu').first);
+    await tester.tap(find.byTooltip('Game menu').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Statistics'));
     await tester.pumpAndSettle();

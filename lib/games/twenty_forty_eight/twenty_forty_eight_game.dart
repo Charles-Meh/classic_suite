@@ -4,7 +4,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../shared/animation_constants.dart';
 import '../../shared/duration_format.dart';
+import '../../shared/help_widgets.dart';
+import '../../shared/win_screen.dart';
 import 'twenty_forty_eight_game_state.dart';
 import 'twenty_forty_eight_stats.dart';
 import 'twenty_forty_eight_stats_store.dart';
@@ -189,7 +192,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
 
     _gestureLock++;
     await _applyState(result.state);
-    await Future<void>.delayed(const Duration(milliseconds: 175));
+    await Future<void>.delayed(kTileSlideDuration);
     if (!mounted) {
       return;
     }
@@ -242,9 +245,34 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
       builder: (context) {
         return AlertDialog(
           title: const Text('How to play'),
-          content: const Text(
-            'Swipe anywhere on the board area to slide every tile. Matching values merge once per move. '
-            'Reach 2048 to win, then keep going if you want a bigger tile. Undo gives you a safety net.',
+          content: const SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                HelpSection(
+                  title: 'Merge example',
+                  children: [
+                    HelpDiagram(
+                      'Before swipe left      After swipe left\n[2][2][4][ ]   →       [4][4][ ][ ]\n\nEach tile merges once per move.',
+                    ),
+                  ],
+                ),
+                HelpSection(
+                  title: 'Rules',
+                  children: [
+                    HelpBulletList(
+                      items: [
+                        'Swipe anywhere on the board area to slide every tile.',
+                        'Matching values merge once per move.',
+                        'Reach 2048 to win, then keep going if you want a bigger tile.',
+                        'Undo gives you a safety net.',
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -354,7 +382,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
             ),
             const SizedBox(height: 12),
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
+              duration: kCardHighlightDuration,
               child: Text(
                 state.message,
                 key: ValueKey<String>(state.message),
@@ -436,7 +464,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                   for (final tile in state.tiles)
                     AnimatedPositioned(
                       key: Key('2048_tile_${tile.id}'),
-                      duration: const Duration(milliseconds: 160),
+                      duration: kTileSlideDuration,
                       curve: Curves.easeOutCubic,
                       left: gap + tile.column * (cellSize + gap),
                       top: gap + tile.row * (cellSize + gap),
@@ -444,10 +472,10 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                       height: cellSize,
                       child: _TileCard(tile: tile),
                     ),
-                  if (state.isPaused || state.isWon || state.isLost)
+                  if (state.isPaused || state.isLost)
                     Positioned.fill(
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 170),
+                        duration: kCardOverlayDuration,
                         decoration: BoxDecoration(
                           color: scheme.scrim.withValues(alpha: 0.42),
                           borderRadius: BorderRadius.circular(24),
@@ -466,11 +494,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  state.isPaused
-                                      ? 'Paused'
-                                      : state.isLost
-                                      ? 'Game over'
-                                      : '2048 reached',
+                                  state.isPaused ? 'Paused' : 'Game over',
                                   style: Theme.of(
                                     context,
                                   ).textTheme.headlineSmall,
@@ -479,9 +503,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                                 Text(
                                   state.isPaused
                                       ? 'Your board is saved.'
-                                      : state.isLost
-                                      ? 'Start a new run or undo the last move.'
-                                      : 'You can keep going for 4096 and beyond.',
+                                      : 'Start a new run or undo the last move.',
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 12),
@@ -495,11 +517,6 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                                         onPressed: _handleResume,
                                         child: const Text('Resume'),
                                       ),
-                                    if (state.isWon && !state.keepGoing)
-                                      FilledButton(
-                                        onPressed: _handleContinue,
-                                        child: const Text('Keep going'),
-                                      ),
                                     OutlinedButton(
                                       onPressed: _startNewGame,
                                       child: const Text('Restart'),
@@ -512,6 +529,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                         ),
                       ),
                     ),
+                  if (state.isWon) _buildWinOverlay(),
                 ],
               ),
             ),
@@ -521,10 +539,68 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
     );
   }
 
+  void _backToMenu() {
+    Navigator.of(context).maybePop();
+  }
+
+  Widget _buildWinOverlay() {
+    return GameWinScreen(
+      theme: WinScreenTheme.twentyFortyEight,
+      title: '2048!',
+      subtitle:
+          'Tiles burst, confetti flies, and that score looks pretty good too.',
+      stats: [
+        WinScreenStat(
+          label: 'Score',
+          value: '${state.score}',
+          icon: Icons.star_outline_rounded,
+        ),
+        WinScreenStat(
+          label: 'Moves',
+          value: '${state.moveCount}',
+          icon: Icons.swipe_rounded,
+        ),
+        WinScreenStat(
+          label: 'Best tile',
+          value: '${state.highestTile}',
+          icon: Icons.auto_awesome,
+        ),
+      ],
+      onNewGame: _startNewGame,
+      onBackToMenu: _backToMenu,
+      newGameLabel: 'New Run',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('2048')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: const Text('2048'),
+        actions: [
+          IconButton(
+            tooltip: 'Help',
+            onPressed: _showHowToPlay,
+            icon: const Icon(Icons.help_outline),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Game menu',
+            onSelected: (value) async {
+              switch (value) {
+                case 'new':
+                  await _startNewGame();
+                case 'stats':
+                  await _showStatistics();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'new', child: Text('New game')),
+              PopupMenuItem(value: 'stats', child: Text('Statistics')),
+            ],
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
@@ -636,7 +712,7 @@ class _TileCard extends StatelessWidget {
         : 1.0;
 
     return AnimatedScale(
-      duration: const Duration(milliseconds: 150),
+      duration: kTileMergePopDuration,
       curve: Curves.easeOutBack,
       scale: scale,
       child: DecoratedBox(

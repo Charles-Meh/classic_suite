@@ -52,7 +52,10 @@ class MinesweeperStats {
     return copyWith(currentStreak: 0);
   }
 
-  MinesweeperStats recordWin({required String difficultyId, required int seconds}) {
+  MinesweeperStats recordWin({
+    required String difficultyId,
+    required int seconds,
+  }) {
     final nextStreak = currentStreak + 1;
     return copyWith(
       gamesWon: gamesWon + 1,

@@ -74,72 +74,63 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('launcher shows Klondike Klondike and navigates', (
+  testWidgets('launcher shows Klondike Solitaire and navigates', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const ClassicSuiteApp());
 
-    expect(find.text('Klondike Klondike'), findsOneWidget);
+    expect(find.text('Klondike Solitaire'), findsOneWidget);
 
-    await tester.tap(find.text('Klondike Klondike'));
+    await tester.tap(find.text('Klondike Solitaire'));
     await tester.pumpAndSettle();
 
     expect(find.byType(KlondikeGame), findsOneWidget);
-    expect(find.text('Klondike Klondike'), findsWidgets);
+    expect(find.text('Klondike Solitaire'), findsWidgets);
   });
 
   testWidgets('initial deal shows non-empty tableau and stock', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const ClassicSuiteApp());
-    await tester.tap(find.text('Klondike Klondike'));
+    await tester.tap(find.text('Klondike Solitaire'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(PlayingCardView), findsWidgets);
+    expect(find.byKey(const Key('stock')), findsOneWidget);
     expect(find.byType(GestureDetector), findsWidgets);
   });
 
   testWidgets('tap stock draws a card into waste', (WidgetTester tester) async {
     await tester.pumpWidget(const ClassicSuiteApp());
-    await tester.tap(find.text('Klondike Klondike'));
+    await tester.tap(find.text('Klondike Solitaire'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('stock')));
     await tester.pump();
 
-    expect(find.byType(PlayingCardView), findsWidgets);
+    expect(find.byKey(const Key('waste_draggable')), findsOneWidget);
   });
 
   testWidgets('foundations show visible placeholders on first load', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const ClassicSuiteApp());
-    await tester.tap(find.text('Klondike Klondike'));
+    await tester.tap(find.text('Klondike Solitaire'));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('foundation_0')), findsOneWidget);
     expect(find.byKey(const Key('foundation_1')), findsOneWidget);
     expect(find.byKey(const Key('foundation_2')), findsOneWidget);
     expect(find.byKey(const Key('foundation_3')), findsOneWidget);
-    expect(find.text('C'), findsOneWidget);
-    expect(find.text('D'), findsOneWidget);
-    expect(find.text('H'), findsOneWidget);
-    expect(find.text('S'), findsOneWidget);
   });
 
-  testWidgets('settings menu switches draw count to three-card draw', (
+  testWidgets('bottom controls switch draw count to three-card draw', (
     WidgetTester tester,
   ) async {
     final state = GameState();
     await tester.pumpWidget(_buildKlondikeHarness(state));
     await tester.pumpAndSettle();
 
-    await _openGameMenu(tester);
-    await tester.tap(find.text('Settings'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('3-card draw'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Apply and deal'));
+    await tester.tap(find.text('Draw 3'));
     await tester.pumpAndSettle();
 
     expect(state.drawCount, 3);
@@ -529,7 +520,7 @@ void main() {
     await tester.tap(find.text('Statistics'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Klondike Klondike statistics'), findsOneWidget);
+    expect(find.text('Klondike Solitaire statistics'), findsOneWidget);
     expect(find.text('Current streak'), findsOneWidget);
     expect(find.text('Best streak'), findsOneWidget);
   });
@@ -589,7 +580,7 @@ void main() {
     await _openGameMenu(tester);
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Winning deal'));
+    await tester.tap(find.text('Winning deal').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Apply and deal'));
     await tester.pumpAndSettle();

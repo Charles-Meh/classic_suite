@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../shared/animation_constants.dart';
+
+import '../../shared/win_screen.dart';
 import 'hearts_game_state.dart';
 import 'hearts_stats.dart';
 import 'hearts_stats_store.dart';
@@ -16,7 +19,7 @@ class HeartsGame extends StatefulWidget {
   State<HeartsGame> createState() => _HeartsGameState();
 }
 
-class _HeartsGameState extends State<HeartsGame> {
+class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
   late HeartsGameState state;
   final HeartsStatsStore _statsStore = HeartsStatsStore();
   HeartsStats _stats = const HeartsStats();
@@ -30,6 +33,7 @@ class _HeartsGameState extends State<HeartsGame> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     state = widget.initialState ?? HeartsGameState.newMatch();
     _hasRecordedMatchStart = widget.initialState != null;
     _loadState();
@@ -37,8 +41,18 @@ class _HeartsGameState extends State<HeartsGame> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _aiTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    if (lifecycleState == AppLifecycleState.inactive ||
+        lifecycleState == AppLifecycleState.paused ||
+        lifecycleState == AppLifecycleState.detached) {
+      _persistState();
+    }
   }
 
   Future<void> _loadState() async {
@@ -71,7 +85,7 @@ class _HeartsGameState extends State<HeartsGame> {
 
   Duration get _aiDelay => switch (state.speed) {
     HeartsSpeed.instant => const Duration(milliseconds: 1),
-    HeartsSpeed.normal => const Duration(milliseconds: 550),
+    HeartsSpeed.normal => kCardAutoMoveDuration,
     HeartsSpeed.relaxed => const Duration(milliseconds: 950),
   };
 
@@ -96,7 +110,8 @@ class _HeartsGameState extends State<HeartsGame> {
     if (_recordedCurrentHand || state.lastRoundAppliedScores == null) {
       return;
     }
-    final handBest = state.lastRoundAppliedScores![0] ==
+    final handBest =
+        state.lastRoundAppliedScores![0] ==
         state.lastRoundAppliedScores!.reduce((a, b) => a < b ? a : b);
     final next = _stats.recordHand(
       humanWonHand: handBest,
@@ -113,7 +128,9 @@ class _HeartsGameState extends State<HeartsGame> {
     if (_recordedCurrentMatch || !state.isMatchComplete) {
       return;
     }
-    final humanWon = state.matchScores[0] == state.matchScores.reduce((a, b) => a < b ? a : b);
+    final humanWon =
+        state.matchScores[0] ==
+        state.matchScores.reduce((a, b) => a < b ? a : b);
     final next = _stats.recordMatchFinished(
       humanWonMatch: humanWon,
       finalScore: state.matchScores[0],
@@ -125,7 +142,10 @@ class _HeartsGameState extends State<HeartsGame> {
     await _statsStore.save(next);
   }
 
-  Future<void> _applyState(HeartsGameState nextState, {bool recordHistory = false}) async {
+  Future<void> _applyState(
+    HeartsGameState nextState, {
+    bool recordHistory = false,
+  }) async {
     if (recordHistory) {
       _history.add(state);
     }
@@ -140,7 +160,10 @@ class _HeartsGameState extends State<HeartsGame> {
 
   void _driveAi() {
     _aiTimer?.cancel();
-    if (!mounted || !state.isPlaying || state.isPaused || state.currentPlayer == 0) {
+    if (!mounted ||
+        !state.isPlaying ||
+        state.isPaused ||
+        state.currentPlayer == 0) {
       return;
     }
     _aiTimer = Timer(_aiDelay, () async {
@@ -211,10 +234,15 @@ class _HeartsGameState extends State<HeartsGame> {
             _StatRow(label: 'Match wins', value: '${_stats.matchesWon}'),
             _StatRow(label: 'Hands played', value: '${_stats.handsPlayed}'),
             _StatRow(label: 'Hands won', value: '${_stats.handsWon}'),
-            _StatRow(label: 'Shoot the moon', value: '${_stats.shootTheMoonCount}'),
+            _StatRow(
+              label: 'Shoot the moon',
+              value: '${_stats.shootTheMoonCount}',
+            ),
             _StatRow(
               label: 'Best final score',
-              value: _stats.bestMatchScore == null ? '—' : '${_stats.bestMatchScore}',
+              value: _stats.bestMatchScore == null
+                  ? '—'
+                  : '${_stats.bestMatchScore}',
             ),
           ],
         ),
@@ -313,18 +341,24 @@ class _HeartsGameState extends State<HeartsGame> {
                     width: 150,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: player == 0 ? scheme.primaryContainer : scheme.surfaceContainerHighest,
+                      color: player == 0
+                          ? scheme.primaryContainer
+                          : scheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(state.playerLabel(player), style: Theme.of(context).textTheme.titleSmall),
+                        Text(
+                          state.playerLabel(player),
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
                         const SizedBox(height: 6),
                         Text('Match: ${state.matchScores[player]}'),
                         Text('Hand: ${state.handPoints[player]}'),
                         Text('Tricks: ${state.tricksWon[player]}'),
-                        if (player != 0) Text('Cards: ${state.hands[player].length}'),
+                        if (player != 0)
+                          Text('Cards: ${state.hands[player].length}'),
                       ],
                     ),
                   ),
@@ -356,7 +390,9 @@ class _HeartsGameState extends State<HeartsGame> {
                 child: Text(
                   '${state.playerLabel(state.lastRoundMoonShooter!)} shot the moon.',
                   key: const Key('hearts_moon_banner'),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ),
           ],
@@ -404,7 +440,9 @@ class _HeartsGameState extends State<HeartsGame> {
                     child: Column(
                       children: [
                         Text(
-                          state.currentTrick.isEmpty ? 'Current trick' : 'Trick in progress',
+                          state.currentTrick.isEmpty
+                              ? 'Current trick'
+                              : 'Trick in progress',
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                         const SizedBox(height: 12),
@@ -442,7 +480,8 @@ class _HeartsGameState extends State<HeartsGame> {
   }
 
   Widget _buildHumanHand(BuildContext context) {
-    final isPassing = state.isPassing && state.passDirection != HeartsPassDirection.hold;
+    final isPassing =
+        state.isPassing && state.passDirection != HeartsPassDirection.hold;
     final legal = state.legalPlaysFor(0).map((card) => card.key).toSet();
 
     return Card(
@@ -474,7 +513,9 @@ class _HeartsGameState extends State<HeartsGame> {
                 if (isPassing)
                   FilledButton(
                     key: const Key('hearts_confirm_pass'),
-                    onPressed: state.selectedPassCards.length == 3 ? _confirmPass : null,
+                    onPressed: state.selectedPassCards.length == 3
+                        ? _confirmPass
+                        : null,
                     child: Text('Pass ${state.selectedPassCards.length}/3'),
                   ),
               ],
@@ -489,12 +530,15 @@ class _HeartsGameState extends State<HeartsGame> {
                       padding: const EdgeInsets.only(right: 8),
                       child: GestureDetector(
                         onTap: () {
-                          if (state.isPaused || state.isRoundComplete || state.isMatchComplete) {
+                          if (state.isPaused ||
+                              state.isRoundComplete ||
+                              state.isMatchComplete) {
                             return;
                           }
                           if (isPassing) {
                             _togglePassSelection(card.key);
-                          } else if (state.isHumanTurn && legal.contains(card.key)) {
+                          } else if (state.isHumanTurn &&
+                              legal.contains(card.key)) {
                             _playHumanCard(card.key);
                           }
                         },
@@ -502,7 +546,11 @@ class _HeartsGameState extends State<HeartsGame> {
                           key: Key('hearts_human_card_${card.key}'),
                           card: card,
                           selected: state.selectedPassCards.contains(card.key),
-                          playable: !isPassing && legal.contains(card.key) && state.isHumanTurn && !state.isPaused,
+                          playable:
+                              !isPassing &&
+                              legal.contains(card.key) &&
+                              state.isHumanTurn &&
+                              !state.isPaused,
                         ),
                       ),
                     ),
@@ -515,30 +563,96 @@ class _HeartsGameState extends State<HeartsGame> {
     );
   }
 
+  bool get _humanWonMatch =>
+      state.isMatchComplete &&
+      state.matchScores[0] == state.matchScores.reduce((a, b) => a < b ? a : b);
+
+  void _backToMenu() {
+    Navigator.of(context).maybePop();
+  }
+
+  Widget _buildWinOverlay() {
+    return GameWinScreen(
+      theme: WinScreenTheme.hearts,
+      title: 'Table Won!',
+      subtitle: 'The moon rises, hearts drift upward, and the table is yours.',
+      stats: [
+        WinScreenStat(
+          label: 'Final score',
+          value: '${state.matchScores[0]}',
+          icon: Icons.scoreboard_outlined,
+        ),
+        WinScreenStat(
+          label: 'Match wins',
+          value: '${_stats.matchesWon}',
+          icon: Icons.emoji_events_outlined,
+        ),
+        WinScreenStat(
+          label: 'Hands won',
+          value: '${_stats.handsWon}',
+          icon: Icons.favorite_outline,
+        ),
+      ],
+      onNewGame: _newMatch,
+      onBackToMenu: _backToMenu,
+      newGameLabel: 'New Match',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Hearts')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: const Text('Hearts'),
+        actions: [
+          IconButton(
+            tooltip: 'Help',
+            onPressed: _showRules,
+            icon: const Icon(Icons.help_outline),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Game menu',
+            onSelected: (value) async {
+              switch (value) {
+                case 'new':
+                  await _newMatch();
+                case 'stats':
+                  await _showStats();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'new', child: Text('New match')),
+              PopupMenuItem(value: 'stats', child: Text('Statistics')),
+            ],
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1200),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildScoreboard(context),
-                        const SizedBox(height: 16),
-                        _buildTable(context),
-                        const SizedBox(height: 16),
-                        _buildHumanHand(context),
-                      ],
+              child: Stack(
+                children: [
+                  SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1200),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildScoreboard(context),
+                            const SizedBox(height: 16),
+                            _buildTable(context),
+                            const SizedBox(height: 16),
+                            _buildHumanHand(context),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  if (_humanWonMatch) _buildWinOverlay(),
+                ],
               ),
             ),
     );
@@ -562,9 +676,10 @@ class _CardFace extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isRed = card.suit == HeartsSuit.hearts || card.suit == HeartsSuit.diamonds;
+    final isRed =
+        card.suit == HeartsSuit.hearts || card.suit == HeartsSuit.diamonds;
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
+      duration: kCardHighlightDuration,
       width: compact ? 64 : 72,
       height: compact ? 86 : 100,
       padding: const EdgeInsets.all(8),
@@ -627,11 +742,13 @@ class _OpponentStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
+      duration: kCardHighlightDuration,
       margin: const EdgeInsets.symmetric(horizontal: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: active ? scheme.secondaryContainer : scheme.surfaceContainerHighest,
+        color: active
+            ? scheme.secondaryContainer
+            : scheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(

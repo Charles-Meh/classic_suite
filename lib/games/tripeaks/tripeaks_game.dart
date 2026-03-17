@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:playing_cards/playing_cards.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../shared/animation_constants.dart';
 import '../../shared/duration_format.dart';
+import '../../shared/help_widgets.dart';
+import '../../shared/win_screen.dart';
 import 'tripeaks_game_state.dart';
 import 'tripeaks_stats.dart';
 import 'tripeaks_stats_store.dart';
@@ -19,7 +22,10 @@ class TriPeaksGame extends StatefulWidget {
   State<TriPeaksGame> createState() => _TriPeaksGameState();
 }
 
-class _TriPeaksGameState extends State<TriPeaksGame> {
+enum _TriPeaksMenuAction { newGame, restart, stats, help }
+
+class _TriPeaksGameState extends State<TriPeaksGame>
+    with WidgetsBindingObserver {
   static const _historyKey = 'classic_suite.tripeaks.history';
   static const _redoHistoryKey = 'classic_suite.tripeaks.redo_history';
 
@@ -37,6 +43,7 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     state = widget.initialState ?? TriPeaksGameState.newGame();
     _initialDealState = state.copyWith();
     _hasRecordedStart = widget.initialState != null;
@@ -46,26 +53,38 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    if (lifecycleState == AppLifecycleState.inactive ||
+        lifecycleState == AppLifecycleState.paused ||
+        lifecycleState == AppLifecycleState.detached) {
+      _persistState();
+    }
   }
 
   Future<void> _loadState() async {
     final prefs = await SharedPreferences.getInstance();
     final loaded = widget.initialState == null
-        ? TriPeaksGameState.tryDecode(prefs.getString(TriPeaksGameState.storageKey))
+        ? TriPeaksGameState.tryDecode(
+            prefs.getString(TriPeaksGameState.storageKey),
+          )
         : null;
     final history = widget.initialState == null
         ? (prefs.getStringList(_historyKey) ?? const [])
-            .map(TriPeaksGameState.tryDecode)
-            .whereType<TriPeaksGameState>()
-            .toList()
+              .map(TriPeaksGameState.tryDecode)
+              .whereType<TriPeaksGameState>()
+              .toList()
         : <TriPeaksGameState>[];
     final redoHistory = widget.initialState == null
         ? (prefs.getStringList(_redoHistoryKey) ?? const [])
-            .map(TriPeaksGameState.tryDecode)
-            .whereType<TriPeaksGameState>()
-            .toList()
+              .map(TriPeaksGameState.tryDecode)
+              .whereType<TriPeaksGameState>()
+              .toList()
         : <TriPeaksGameState>[];
     final stats = await _statsStore.load();
 
@@ -96,7 +115,10 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
   Future<void> _persistState() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(TriPeaksGameState.storageKey, state.encode());
-    await prefs.setStringList(_historyKey, _history.map((entry) => entry.encode()).toList());
+    await prefs.setStringList(
+      _historyKey,
+      _history.map((entry) => entry.encode()).toList(),
+    );
     await prefs.setStringList(
       _redoHistoryKey,
       _redoHistory.map((entry) => entry.encode()).toList(),
@@ -262,7 +284,10 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
                 value: '${(_stats.winRate * 100).toStringAsFixed(0)}%',
               ),
               _StatRow(label: 'Best score', value: '${_stats.bestScore}'),
-              _StatRow(label: 'Current streak', value: '${_stats.currentStreak}'),
+              _StatRow(
+                label: 'Current streak',
+                value: '${_stats.currentStreak}',
+              ),
               _StatRow(label: 'Best streak', value: '${_stats.bestStreak}'),
               _StatRow(label: 'Longest run', value: '${_stats.longestRunEver}'),
             ],
@@ -284,10 +309,34 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
       builder: (context) {
         return AlertDialog(
           title: const Text('How to play'),
-          content: const Text(
-            'Remove exposed peak cards that are exactly one rank above or below '
-            'the waste card. Aces wrap with Kings. Draw from stock when you are '
-            'stuck. Longer removal streaks score more points.',
+          content: const SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                HelpSection(
+                  title: 'Valid move examples',
+                  children: [
+                    HelpDiagram(
+                      'Waste 7  →  you may take 6 or 8\nWaste K  →  you may take Q or A',
+                    ),
+                  ],
+                ),
+                HelpSection(
+                  title: 'Rules',
+                  children: [
+                    HelpBulletList(
+                      items: [
+                        'Remove exposed peak cards that are exactly one rank above or below the waste card.',
+                        'Aces wrap with Kings.',
+                        'Draw from stock when you are stuck.',
+                        'Longer removal streaks score more points.',
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -308,30 +357,9 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'TriPeaks Solitaire',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                ),
-                IconButton(
-                  key: const Key('tripeaks_stats'),
-                  onPressed: _showStatistics,
-                  icon: const Icon(Icons.bar_chart_rounded),
-                ),
-                IconButton(
-                  key: const Key('tripeaks_pause'),
-                  onPressed: _togglePaused,
-                  icon: Icon(state.paused ? Icons.play_arrow : Icons.pause),
-                ),
-                IconButton(
-                  key: const Key('tripeaks_help'),
-                  onPressed: _showHowToPlay,
-                  icon: const Icon(Icons.help_outline),
-                ),
-              ],
+            Text(
+              'TriPeaks Solitaire',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -372,11 +400,8 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
             ),
             const SizedBox(height: 12),
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              child: Text(
-                state.message,
-                key: ValueKey<String>(state.message),
-              ),
+              duration: kCardHighlightDuration,
+              child: Text(state.message, key: ValueKey<String>(state.message)),
             ),
           ],
         ),
@@ -409,7 +434,7 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+        duration: kCardDropDuration,
         width: metrics.cardWidth,
         height: metrics.cardHeight,
         padding: const EdgeInsets.all(2),
@@ -431,12 +456,16 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
                 ),
                 child: const SizedBox.expand(),
               )
-            : PlayingCardView(
-                card: card.card,
-                showBack: !card.faceUp,
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(metrics.radius),
+            : SizedBox(
+                width: metrics.cardWidth,
+                height: metrics.cardHeight,
+                child: PlayingCardView(
+                  card: card.card,
+                  showBack: !card.faceUp,
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(metrics.radius),
+                  ),
                 ),
               ),
       ),
@@ -448,7 +477,8 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
       children: [
         GestureDetector(
           key: const Key('tripeaks_stock'),
-          onTap: state.stock.isEmpty || state.paused || state.isWon || state.isLost
+          onTap:
+              state.stock.isEmpty || state.paused || state.isWon || state.isLost
               ? null
               : _drawFromStock,
           child: SizedBox(
@@ -458,7 +488,11 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
               clipBehavior: Clip.none,
               children: [
                 if (state.stock.isNotEmpty)
-                  for (int layer = 0; layer < math.min(3, state.stock.length); layer++)
+                  for (
+                    int layer = 0;
+                    layer < math.min(3, state.stock.length);
+                    layer++
+                  )
                     Positioned(
                       left: layer * 2,
                       top: layer * 2,
@@ -476,7 +510,10 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
                   child: Align(
                     alignment: Alignment.bottomRight,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.55),
                         borderRadius: BorderRadius.circular(999),
@@ -496,53 +533,21 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
           ),
         ),
         SizedBox(width: metrics.columnGap * 1.5),
-        _buildCard(
-          state.wasteTop,
-          metrics,
-          key: const Key('tripeaks_waste'),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton.icon(
-                key: const Key('tripeaks_undo'),
-                onPressed: _history.isEmpty ? null : _undo,
-                icon: const Icon(Icons.undo),
-                label: const Text('Undo'),
-              ),
-              OutlinedButton.icon(
-                key: const Key('tripeaks_redo'),
-                onPressed: _redoHistory.isEmpty ? null : _redo,
-                icon: const Icon(Icons.redo),
-                label: const Text('Redo'),
-              ),
-              OutlinedButton.icon(
-                key: const Key('tripeaks_new'),
-                onPressed: _newGame,
-                icon: const Icon(Icons.casino_outlined),
-                label: const Text('New game'),
-              ),
-              OutlinedButton.icon(
-                key: const Key('tripeaks_restart'),
-                onPressed: _restartDeal,
-                icon: const Icon(Icons.restart_alt),
-                label: const Text('Restart'),
-              ),
-            ],
-          ),
-        ),
+        _buildCard(state.wasteTop, metrics, key: const Key('tripeaks_waste')),
+        const Spacer(),
       ],
     );
   }
 
   Widget _buildTableau(_TriPeaksMetrics metrics) {
-    final rows = <int, List<TriPeaksPosition>>{};
-    for (final position in TriPeaksGameState.layout) {
-      rows.putIfAbsent(position.row, () => []).add(position);
-    }
+    final orderedPositions = [...TriPeaksGameState.layout]
+      ..sort((a, b) {
+        final byRow = b.row.compareTo(a.row);
+        if (byRow != 0) {
+          return byRow;
+        }
+        return a.index.compareTo(b.index);
+      });
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -555,30 +560,29 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (int row = 0; row <= 3; row++) ...[
-                  SizedBox(
-                    height: metrics.rowStride,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        for (final position in rows[row]!)
-                          Positioned(
-                            left: position.column * metrics.columnGap,
-                            child: _buildCard(
-                              state.tableau[position.index],
-                              metrics,
-                              key: Key('tripeaks_tableau_${position.index}'),
-                              highlighted: state.isValidMove(position.index),
-                              onTap: state.isValidMove(position.index)
-                                  ? () => _removeCard(position.index)
-                                  : null,
-                            ),
+                SizedBox(
+                  width: metrics.boardWidth,
+                  height: metrics.tableauHeight,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      for (final position in orderedPositions)
+                        Positioned(
+                          left: position.column * metrics.columnGap,
+                          top: position.row * metrics.rowStep,
+                          child: _buildCard(
+                            state.tableau[position.index],
+                            metrics,
+                            key: Key('tripeaks_tableau_${position.index}'),
+                            highlighted: state.isValidMove(position.index),
+                            onTap: state.isValidMove(position.index)
+                                ? () => _removeCard(position.index)
+                                : null,
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
-                  if (row < 3) SizedBox(height: metrics.overlapGap),
-                ],
+                ),
                 SizedBox(height: metrics.sectionGap),
                 _buildStockAndWaste(metrics),
               ],
@@ -586,6 +590,37 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
           ),
         ),
       ),
+    );
+  }
+
+  void _backToMenu() {
+    Navigator.of(context).maybePop();
+  }
+
+  Widget _buildWinOverlay() {
+    return GameWinScreen(
+      theme: WinScreenTheme.tripeaks,
+      title: 'Peaks Conquered!',
+      subtitle: 'The peaks crumble away and the summit opens up. Strong run.',
+      stats: [
+        WinScreenStat(
+          label: 'Score',
+          value: '${state.score}',
+          icon: Icons.star_outline_rounded,
+        ),
+        WinScreenStat(
+          label: 'Wins',
+          value: '${_stats.gamesWon}',
+          icon: Icons.emoji_events_outlined,
+        ),
+        WinScreenStat(
+          label: 'Streak',
+          value: '${_stats.currentStreak}',
+          icon: Icons.local_fire_department_outlined,
+        ),
+      ],
+      onNewGame: _newGame,
+      onBackToMenu: _backToMenu,
     );
   }
 
@@ -601,10 +636,7 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
       subtitle = 'Tap play to resume your current deal.';
       icon = Icons.pause_circle_filled;
     } else if (state.isWon) {
-      tint = const Color(0x8814532D);
-      title = 'You won';
-      subtitle = 'All 28 peak cards are gone. Score: ${state.score}.';
-      icon = Icons.emoji_events;
+      return _buildWinOverlay();
     } else {
       tint = const Color(0x88B3261E);
       title = 'No moves left';
@@ -639,6 +671,7 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
                 children: [
                   if (state.paused)
                     FilledButton.icon(
+                      key: const Key('tripeaks_overlay_resume'),
                       onPressed: _togglePaused,
                       icon: const Icon(Icons.play_arrow),
                       label: const Text('Resume'),
@@ -669,16 +702,105 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
     );
   }
 
+  Widget _buildControls(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            FilledButton.icon(
+              key: const Key('tripeaks_undo'),
+              onPressed: _history.isEmpty ? null : _undo,
+              icon: const Icon(Icons.undo),
+              label: const Text('Undo'),
+            ),
+            OutlinedButton.icon(
+              key: const Key('tripeaks_redo'),
+              onPressed: _redoHistory.isEmpty ? null : _redo,
+              icon: const Icon(Icons.redo),
+              label: const Text('Redo'),
+            ),
+            OutlinedButton.icon(
+              key: const Key('tripeaks_pause'),
+              onPressed: _togglePaused,
+              icon: Icon(state.paused ? Icons.play_arrow : Icons.pause),
+              label: Text(state.paused ? 'Resume' : 'Pause'),
+            ),
+            OutlinedButton.icon(
+              key: const Key('tripeaks_new'),
+              onPressed: _newGame,
+              icon: const Icon(Icons.casino_outlined),
+              label: const Text('New game'),
+            ),
+            OutlinedButton.icon(
+              key: const Key('tripeaks_restart'),
+              onPressed: _restartDeal,
+              icon: const Icon(Icons.restart_alt),
+              label: const Text('Restart'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('TriPeaks Solitaire')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: const Text('TriPeaks Solitaire'),
+        actions: [
+          IconButton(
+            tooltip: 'Help',
+            onPressed: _showHowToPlay,
+            icon: const Icon(Icons.help_outline),
+          ),
+          PopupMenuButton<_TriPeaksMenuAction>(
+            tooltip: 'Game menu',
+            onSelected: (value) async {
+              switch (value) {
+                case _TriPeaksMenuAction.newGame:
+                  await _newGame();
+                case _TriPeaksMenuAction.restart:
+                  await _restartDeal();
+                case _TriPeaksMenuAction.stats:
+                  await _showStatistics();
+                case _TriPeaksMenuAction.help:
+                  await _showHowToPlay();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: _TriPeaksMenuAction.newGame,
+                child: Text('New game'),
+              ),
+              PopupMenuItem(
+                value: _TriPeaksMenuAction.restart,
+                child: Text('Restart deal'),
+              ),
+              PopupMenuItem(
+                value: _TriPeaksMenuAction.stats,
+                child: Text('Statistics'),
+              ),
+              PopupMenuItem(
+                value: _TriPeaksMenuAction.help,
+                child: Text('How to play'),
+              ),
+            ],
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final metrics = _TriPeaksMetrics.fromWidth(constraints.maxWidth);
+                  final metrics = _TriPeaksMetrics.fromWidth(
+                    constraints.maxWidth,
+                  );
                   return Stack(
                     children: [
                       SingleChildScrollView(
@@ -692,6 +814,8 @@ class _TriPeaksGameState extends State<TriPeaksGame> {
                                 _buildHeader(context),
                                 const SizedBox(height: 16),
                                 _buildTableau(metrics),
+                                const SizedBox(height: 16),
+                                _buildControls(context),
                               ],
                             ),
                           ),
@@ -725,7 +849,10 @@ class _MetricChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -755,7 +882,10 @@ class _StatRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        children: [Expanded(child: Text(label)), Text(value)],
+        children: [
+          Expanded(child: Text(label)),
+          Text(value),
+        ],
       ),
     );
   }
@@ -767,34 +897,39 @@ class _TriPeaksMetrics {
     required this.cardHeight,
     required this.radius,
     required this.columnGap,
-    required this.rowStride,
-    required this.overlapGap,
+    required this.rowStep,
     required this.sectionGap,
     required this.boardWidth,
+    required this.tableauHeight,
   });
 
   final double cardWidth;
   final double cardHeight;
   final double radius;
   final double columnGap;
-  final double rowStride;
-  final double overlapGap;
+  final double rowStep;
   final double sectionGap;
   final double boardWidth;
+  final double tableauHeight;
 
   factory _TriPeaksMetrics.fromWidth(double width) {
-    final cardWidth = width < 420 ? 42.0 : width < 720 ? 54.0 : 72.0;
+    final cardWidth = width < 420
+        ? 42.0
+        : width < 720
+        ? 54.0
+        : 72.0;
     final cardHeight = cardWidth * 1.4;
     final columnGap = cardWidth * 0.82;
+    final rowStep = cardHeight * 0.68;
     return _TriPeaksMetrics(
       cardWidth: cardWidth,
       cardHeight: cardHeight,
       radius: math.max(6, cardWidth * 0.1),
       columnGap: columnGap,
-      rowStride: cardHeight,
-      overlapGap: cardHeight * 0.08,
+      rowStep: rowStep,
       sectionGap: 20,
       boardWidth: (10 * columnGap) + cardWidth,
+      tableauHeight: (3 * rowStep) + cardHeight,
     );
   }
 }

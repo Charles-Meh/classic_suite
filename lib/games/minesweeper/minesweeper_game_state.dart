@@ -276,7 +276,8 @@ class MinesweeperGameState {
         .map(
           (row) => (row as List<dynamic>)
               .map(
-                (cell) => MinesweeperCell.fromJson(cell as Map<String, dynamic>),
+                (cell) =>
+                    MinesweeperCell.fromJson(cell as Map<String, dynamic>),
               )
               .toList(),
         )
@@ -289,7 +290,8 @@ class MinesweeperGameState {
         (value) => value.name == (json['status'] as String? ?? 'ready'),
         orElse: () => MinesweeperGameStatus.ready,
       ),
-      message: json['message'] as String? ??
+      message:
+          json['message'] as String? ??
           'Clear every safe tile. First tap is always safe.',
       elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
       generated: json['generated'] as bool? ?? false,
@@ -396,10 +398,12 @@ class MinesweeperGameState {
     final cell = workingBoard[row][column];
     if (cell.hasMine) {
       workingBoard[row][column] = cell.copyWith(revealed: true, exploded: true);
-      next = next._revealAllMines(workingBoard).copyWith(
-        status: MinesweeperGameStatus.lost,
-        message: 'Boom. Tap restart and try again.',
-      );
+      next = next
+          ._revealAllMines(workingBoard)
+          .copyWith(
+            status: MinesweeperGameStatus.lost,
+            message: 'Boom. Tap restart and try again.',
+          );
       return next;
     }
 
@@ -489,7 +493,9 @@ class MinesweeperGameState {
     );
   }
 
-  MinesweeperGameState _revealAllMines(List<List<MinesweeperCell>> workingBoard) {
+  MinesweeperGameState _revealAllMines(
+    List<List<MinesweeperCell>> workingBoard,
+  ) {
     for (int row = 0; row < rows; row++) {
       for (int column = 0; column < columns; column++) {
         final cell = workingBoard[row][column];
@@ -501,7 +507,11 @@ class MinesweeperGameState {
     return copyWith(board: workingBoard);
   }
 
-  MinesweeperGameState _generateBoard(int safeRow, int safeColumn, {int? seed}) {
+  MinesweeperGameState _generateBoard(
+    int safeRow,
+    int safeColumn, {
+    int? seed,
+  }) {
     final random = seed == null ? Random() : Random(seed);
     final workingBoard = _blankBoard(rows, columns);
 
@@ -531,9 +541,10 @@ class MinesweeperGameState {
         if (cell.hasMine) {
           continue;
         }
-        final adjacent = _neighborCoordinates(row, column)
-            .where((offset) => workingBoard[offset.$1][offset.$2].hasMine)
-            .length;
+        final adjacent = _neighborCoordinates(
+          row,
+          column,
+        ).where((offset) => workingBoard[offset.$1][offset.$2].hasMine).length;
         workingBoard[row][column] = cell.copyWith(adjacentMines: adjacent);
       }
     }
@@ -549,18 +560,18 @@ class MinesweeperGameState {
   Set<(int, int)> _safeStartingZone(int row, int column) {
     final cells = <(int, int)>{};
     for (int r = max(0, row - 1); r <= min(rows - 1, row + 1); r++) {
-      for (
-        int c = max(0, column - 1);
-        c <= min(columns - 1, column + 1);
-        c++
-      ) {
+      for (int c = max(0, column - 1); c <= min(columns - 1, column + 1); c++) {
         cells.add((r, c));
       }
     }
     return cells;
   }
 
-  void _floodReveal(List<List<MinesweeperCell>> workingBoard, int row, int column) {
+  void _floodReveal(
+    List<List<MinesweeperCell>> workingBoard,
+    int row,
+    int column,
+  ) {
     final queue = <(int, int)>[(row, column)];
     final visited = <(int, int)>{};
 
@@ -582,7 +593,9 @@ class MinesweeperGameState {
 
       for (final neighbor in _neighborCoordinates(current.$1, current.$2)) {
         final neighborCell = workingBoard[neighbor.$1][neighbor.$2];
-        if (!neighborCell.hasMine && !neighborCell.revealed && !neighborCell.flagged) {
+        if (!neighborCell.hasMine &&
+            !neighborCell.revealed &&
+            !neighborCell.flagged) {
           queue.add(neighbor);
         }
       }
@@ -592,11 +605,7 @@ class MinesweeperGameState {
   List<(int, int)> _neighborCoordinates(int row, int column) {
     final neighbors = <(int, int)>[];
     for (int r = max(0, row - 1); r <= min(rows - 1, row + 1); r++) {
-      for (
-        int c = max(0, column - 1);
-        c <= min(columns - 1, column + 1);
-        c++
-      ) {
+      for (int c = max(0, column - 1); c <= min(columns - 1, column + 1); c++) {
         if (r == row && c == column) {
           continue;
         }

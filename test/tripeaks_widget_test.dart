@@ -47,7 +47,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('launcher shows TriPeaks and navigates to the game', (tester) async {
+  testWidgets('launcher shows TriPeaks and navigates to the game', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1600));
     await tester.pumpWidget(const ClassicSuiteApp());
 
@@ -67,18 +69,23 @@ void main() {
     expect(find.byKey(const Key('tripeaks_undo')), findsOneWidget);
   });
 
-  testWidgets('tapping a valid exposed card moves it to waste and enables undo', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1200, 1600));
-    await tester.pumpWidget(_buildHarness(state: _interactiveState()));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'tapping a valid exposed card moves it to waste and enables undo',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 1600));
+      await tester.pumpWidget(_buildHarness(state: _interactiveState()));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('tripeaks_tableau_18')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('tripeaks_tableau_18')));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Run x1 • +100 points'), findsOneWidget);
-    final undoButton = tester.widget<FilledButton>(find.byKey(const Key('tripeaks_undo')));
-    expect(undoButton.onPressed, isNotNull);
-  });
+      expect(find.text('Run x1 • +100 points'), findsOneWidget);
+      final undoButton = tester.widget<FilledButton>(
+        find.byKey(const Key('tripeaks_undo')),
+      );
+      expect(undoButton.onPressed, isNotNull);
+    },
+  );
 
   testWidgets('undo and redo restore the deal state', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1600));
@@ -107,15 +114,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Paused'), findsOneWidget);
-    expect(find.text('Resume'), findsOneWidget);
+    expect(find.text('Resume'), findsAtLeastNWidgets(1));
 
-    await tester.tap(find.text('Resume'));
+    await tester.tap(find.byKey(const Key('tripeaks_overlay_resume')));
     await tester.pumpAndSettle();
 
     expect(find.text('Paused'), findsNothing);
   });
 
-  testWidgets('saved state restores paused deal with elapsed time', (tester) async {
+  testWidgets('saved state restores paused deal with elapsed time', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1600));
     final saved = _interactiveState().withElapsedSeconds(44).togglePaused();
     SharedPreferences.setMockInitialValues({

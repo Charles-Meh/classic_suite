@@ -66,6 +66,7 @@ void main() {
     await tester.pumpWidget(_buildHarness());
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byKey(const Key('minesweeper_flag_mode')));
     await tester.tap(find.byKey(const Key('minesweeper_flag_mode')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('minesweeper_cell_0_0')));
@@ -90,6 +91,7 @@ void main() {
   testWidgets('difficulty chips start a different board size', (
     WidgetTester tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1600));
     await tester.pumpWidget(_buildHarness());
     await tester.pumpAndSettle();
 
@@ -101,10 +103,28 @@ void main() {
     expect(find.textContaining('Medium • 16×16 • 40 mines'), findsOneWidget);
   });
 
+  testWidgets('board layout adapts on compact screens without overflow', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    await tester.pumpWidget(_buildHarness());
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('minesweeper_cell_0_0')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('minesweeper_difficulty_hard')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Hard • 16×30 • 99 mines'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('minesweeper_cell_0_0')), findsOneWidget);
+  });
+
   testWidgets('saved state is restored on launch', (WidgetTester tester) async {
-    final saved = MinesweeperGameState.newGame(MinesweeperConfig.easy())
-        .toggleFlag(2, 2)
-        .withElapsedSeconds(33);
+    final saved = MinesweeperGameState.newGame(
+      MinesweeperConfig.easy(),
+    ).toggleFlag(2, 2).withElapsedSeconds(33);
     SharedPreferences.setMockInitialValues({
       MinesweeperGameState.storageKey: saved.encode(),
     });

@@ -32,14 +32,19 @@ void main() {
   testWidgets('tap piece highlights legal moves and executes move', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final state = ChessGameState.newGame(mode: ChessGameMode.passAndPlay);
     await tester.pumpWidget(_buildHarness(state: state));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byKey(const Key('chess_square_6_4')));
     await tester.tap(find.byKey(const Key('chess_square_6_4')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chess_square_4_4')), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('chess_square_4_4')));
     await tester.tap(find.byKey(const Key('chess_square_4_4')));
     await tester.pumpAndSettle();
 

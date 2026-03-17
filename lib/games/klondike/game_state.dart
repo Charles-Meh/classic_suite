@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:playing_cards/playing_cards.dart';
@@ -29,8 +30,14 @@ const List<CardValue> _klondikeValues = [
 
 /// Represents the mutable state of a single Klondike (Klondike) game.
 class GameState {
+  static const String storageKey = 'classic_suite.klondike.saved_state';
+
   /// Number of cards drawn from the stock at a time (1 or 3).
   int drawCount;
+  int? currentSeed;
+  int elapsedSeconds;
+  int moveCount;
+  int score;
 
   /// All cards still in the stock, face-down.
   final List<KlondikeCard> stock = [];
@@ -44,14 +51,30 @@ class GameState {
   /// Seven tableau piles.
   final List<List<KlondikeCard>> tableau = List.generate(7, (_) => []);
 
-  GameState({this.drawCount = 1}) {
-    dealNewGame();
+  GameState({
+    this.drawCount = 1,
+    this.currentSeed,
+    this.elapsedSeconds = 0,
+    this.moveCount = 0,
+    this.score = 0,
+  }) {
+    dealNewGame(seed: currentSeed);
   }
 
-  GameState._fromSnapshot(this.drawCount);
+  GameState._fromSnapshot(
+    this.drawCount, {
+    this.currentSeed,
+    this.elapsedSeconds = 0,
+    this.moveCount = 0,
+    this.score = 0,
+  });
 
   /// Starts a new shuffled game.
   void dealNewGame({int? seed}) {
+    currentSeed = seed;
+    elapsedSeconds = 0;
+    moveCount = 0;
+    score = 0;
     _populateStock(seed: seed);
     _dealTableau();
     waste.clear();
@@ -68,6 +91,65 @@ class GameState {
   /// Starts a curated, guaranteed-winnable deal from a validated seed.
   void dealWinnableGame(int seed) {
     dealSeededGame(seed);
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'drawCount': drawCount,
+      'currentSeed': currentSeed,
+      'elapsedSeconds': elapsedSeconds,
+      'moveCount': moveCount,
+      'score': score,
+      'stock': stock.map(encodeKlondikeCard).toList(),
+      'waste': waste.map(encodeKlondikeCard).toList(),
+      'foundations': foundations
+          .map((pile) => pile.map(encodeKlondikeCard).toList())
+          .toList(),
+      'tableau': tableau
+          .map((pile) => pile.map(encodeKlondikeCard).toList())
+          .toList(),
+    };
+  }
+
+  String encode() => jsonEncode(toJson());
+
+  factory GameState.fromJson(Map<String, dynamic> json) {
+    final state = GameState._fromSnapshot(
+      (json['drawCount'] as num?)?.toInt() ?? 1,
+      currentSeed: (json['currentSeed'] as num?)?.toInt(),
+      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
+      moveCount: (json['moveCount'] as num?)?.toInt() ?? 0,
+      score: (json['score'] as num?)?.toInt() ?? 0,
+    );
+    state._replaceFromJsonPile(state.stock, json['stock']);
+    state._replaceFromJsonPile(state.waste, json['waste']);
+    state._replacePileListFromJson(state.foundations, json['foundations']);
+    state._replacePileListFromJson(state.tableau, json['tableau']);
+    return state;
+  }
+
+  static GameState? tryDecode(String? raw) {
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return GameState.fromJson(decoded);
+      }
+      if (decoded is Map) {
+        return GameState.fromJson(decoded.cast<String, dynamic>());
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  void incrementElapsed() {
+    if (!isWon) {
+      elapsedSeconds += 1;
+    }
   }
 
   void _populateStock({int? seed}) {
@@ -102,7 +184,6 @@ class GameState {
   }
 
   void _dealTableau() {
-    // according to Klondike rules: pile 0 gets 1 card, pile 1 gets 2 cards, ...
     for (int pile = 0; pile < 7; pile++) {
       tableau[pile].clear();
       for (int i = 0; i <= pile; i++) {
@@ -112,9 +193,6 @@ class GameState {
     }
   }
 
-  /// Draws [drawCount] cards from stock into waste. If stock is empty,
-  /// recycling of waste back to stock should be handled externally (e.g. by
-  /// tapping the stock). Returns number of cards actually moved.
   int drawFromStock() {
     if (stock.isEmpty) return 0;
     int moved = 0;
@@ -124,25 +202,36 @@ class GameState {
       waste.add(c);
       moved++;
     }
+    if (moved > 0) {
+      moveCount += 1;
+    }
     return moved;
   }
 
-  /// Recycles waste back to stock (preserving order), making them face-down.
   void recycleWaste() {
+    if (waste.isEmpty) {
+      return;
+    }
     while (waste.isNotEmpty) {
       final c = waste.removeLast();
       c.faceUp = false;
       stock.add(c);
     }
+    moveCount += 1;
   }
 
-  /// Gives the pile list corresponding to the suit index (0..3).
   List<KlondikeCard> foundationForSuit(Suit suit) {
     return foundations[_foundationIndexForSuit(suit)];
   }
 
   GameState copy() {
-    final snapshot = GameState._fromSnapshot(drawCount);
+    final snapshot = GameState._fromSnapshot(
+      drawCount,
+      currentSeed: currentSeed,
+      elapsedSeconds: elapsedSeconds,
+      moveCount: moveCount,
+      score: score,
+    );
     snapshot.stock.addAll(stock.map(_copyCard));
     snapshot.waste.addAll(waste.map(_copyCard));
     for (int i = 0; i < foundations.length; i++) {
@@ -156,6 +245,10 @@ class GameState {
 
   void restoreFrom(GameState snapshot) {
     drawCount = snapshot.drawCount;
+    currentSeed = snapshot.currentSeed;
+    elapsedSeconds = snapshot.elapsedSeconds;
+    moveCount = snapshot.moveCount;
+    score = snapshot.score;
     _replaceCards(stock, snapshot.stock);
     _replaceCards(waste, snapshot.waste);
     for (int i = 0; i < foundations.length; i++) {
@@ -166,7 +259,6 @@ class GameState {
     }
   }
 
-  /// Tests whether a card can be moved to the specified foundation pile.
   bool canMoveToFoundation(KlondikeCard card) {
     if (!_canMoveSingleCard(card)) return false;
     final suitPile = foundationForSuit(card.card.suit);
@@ -177,18 +269,16 @@ class GameState {
     return card.valueIndex == top.valueIndex + 1;
   }
 
-  /// Moves a card into its foundation if valid. Returns true if moved.
   bool moveToFoundation(KlondikeCard card) {
     if (!canMoveToFoundation(card)) return false;
     if (!_removeSingleCard(card)) return false;
     final suitPile = foundationForSuit(card.card.suit);
     suitPile.add(card);
+    moveCount += 1;
+    score += 10;
     return true;
   }
 
-  /// Tests whether [cards] can be moved to the [targetPile]. A single card may
-  /// come from the waste, foundations, or a tableau top card; multi-card moves
-  /// must be a face-up run taken from the end of a tableau pile.
   bool canMoveCardsToTableau(
     List<KlondikeCard> cards,
     List<KlondikeCard> targetPile,
@@ -220,7 +310,6 @@ class GameState {
     return hasOppositeColor && isOneRankLower;
   }
 
-  /// Moves [cards] to [targetPile]. Returns true if the move succeeds.
   bool moveCardsToTableau(
     List<KlondikeCard> cards,
     List<KlondikeCard> targetPile,
@@ -228,30 +317,23 @@ class GameState {
     if (!canMoveCardsToTableau(cards, targetPile)) return false;
     if (!_removeCards(cards)) return false;
     targetPile.addAll(cards);
+    moveCount += 1;
     return true;
   }
 
-  /// Checks whether a sequence starting at [card] in its current tableau pile
-  /// can be moved onto the [targetPile]. The sequence must be face-up.
-  bool canMoveStackToTableau(
-    KlondikeCard card,
-    List<KlondikeCard> targetPile,
-  ) {
+  bool canMoveStackToTableau(KlondikeCard card, List<KlondikeCard> targetPile) {
     final origin = _findTableauPileContaining(card);
     if (origin == null) return false;
     final index = origin.indexOf(card);
     return canMoveCardsToTableau(origin.sublist(index), targetPile);
   }
 
-  /// Moves a sequence starting at [card] onto [targetPile]. Returns true if
-  /// move succeeded.
   bool moveStackToTableau(KlondikeCard card, List<KlondikeCard> targetPile) {
     final origin = _findTableauPileContaining(card)!;
     final idx = origin.indexOf(card);
     return moveCardsToTableau(origin.sublist(idx), targetPile);
   }
 
-  /// Finds the tableau pile containing [card], or null if not found.
   List<KlondikeCard>? _findTableauPileContaining(KlondikeCard card) {
     for (var pile in tableau) {
       if (pile.contains(card)) return pile;
@@ -288,6 +370,26 @@ class GameState {
       ..addAll(source.map(_copyCard));
   }
 
+  void _replaceFromJsonPile(List<KlondikeCard> target, dynamic source) {
+    target
+      ..clear()
+      ..addAll(
+        (source as List<dynamic>? ?? const []).whereType<Map>().map(
+          (card) => decodeKlondikeCard(card.cast<String, dynamic>()),
+        ),
+      );
+  }
+
+  void _replacePileListFromJson(
+    List<List<KlondikeCard>> target,
+    dynamic source,
+  ) {
+    final piles = source as List<dynamic>? ?? const [];
+    for (int i = 0; i < target.length; i++) {
+      _replaceFromJsonPile(target[i], i < piles.length ? piles[i] : null);
+    }
+  }
+
   bool _canMoveSingleCard(KlondikeCard card) {
     if (!card.faceUp) return false;
     if (waste.isNotEmpty && identical(waste.last, card)) return true;
@@ -311,6 +413,7 @@ class GameState {
         pile.removeLast();
         if (pile.isNotEmpty && !pile.last.faceUp) {
           pile.last.faceUp = true;
+          score += 5;
         }
         return true;
       }
@@ -319,6 +422,7 @@ class GameState {
     for (final pile in foundations) {
       if (pile.isNotEmpty && identical(pile.last, card)) {
         pile.removeLast();
+        score = max(0, score - 15);
         return true;
       }
     }
@@ -341,6 +445,7 @@ class GameState {
     origin.removeRange(startIndex, origin.length);
     if (origin.isNotEmpty && !origin.last.faceUp) {
       origin.last.faceUp = true;
+      score += 5;
     }
     return true;
   }
@@ -376,7 +481,6 @@ class GameState {
     return true;
   }
 
-  /// Checks whether the game has been won (all cards in foundations).
   bool get isWon {
     return foundations.every((pile) => pile.length == 13);
   }

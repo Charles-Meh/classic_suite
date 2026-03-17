@@ -181,9 +181,15 @@ class HeartsGameState {
   }) {
     return HeartsGameState._(
       hands: hands.map((hand) => _sortHand([...hand])).toList(),
-      matchScores: [...(matchScores ?? const [0, 0, 0, 0])],
-      handPoints: [...(handPoints ?? const [0, 0, 0, 0])],
-      tricksWon: [...(tricksWon ?? const [0, 0, 0, 0])],
+      matchScores: [
+        ...(matchScores ?? const [0, 0, 0, 0]),
+      ],
+      handPoints: [
+        ...(handPoints ?? const [0, 0, 0, 0]),
+      ],
+      tricksWon: [
+        ...(tricksWon ?? const [0, 0, 0, 0]),
+      ],
       currentTrick: [...(currentTrick ?? const [])],
       completedTricks: [...(completedTricks ?? const [])],
       currentPlayer: currentPlayer,
@@ -208,7 +214,9 @@ class HeartsGameState {
       hands: (json['hands'] as List<dynamic>? ?? const [])
           .map(
             (hand) => (hand as List<dynamic>)
-                .map((card) => HeartsCard.fromJson(card as Map<String, dynamic>))
+                .map(
+                  (card) => HeartsCard.fromJson(card as Map<String, dynamic>),
+                )
                 .toList(),
           )
           .toList(),
@@ -228,7 +236,8 @@ class HeartsGameState {
         orElse: () => HeartsPassDirection.left,
       ),
       selectedPassCards: {
-        for (final item in (json['selectedPassCards'] as List<dynamic>? ?? const []))
+        for (final item
+            in (json['selectedPassCards'] as List<dynamic>? ?? const []))
           '$item',
       },
       heartsBroken: json['heartsBroken'] as bool? ?? false,
@@ -379,7 +388,9 @@ class HeartsGameState {
 
     if (currentTrick.isEmpty) {
       if (isFirstTrick) {
-        return hand.where((card) => card.suit == HeartsSuit.clubs && card.rank == 2).toList();
+        return hand
+            .where((card) => card.suit == HeartsSuit.clubs && card.rank == 2)
+            .toList();
       }
       if (!heartsBroken) {
         final nonHearts = hand.where((card) => !card.isHeart).toList();
@@ -406,7 +417,9 @@ class HeartsGameState {
   }
 
   bool canHumanPlayCard(HeartsCard card) {
-    return legalPlaysFor(humanPlayer).any((candidate) => candidate.key == card.key);
+    return legalPlaysFor(
+      humanPlayer,
+    ).any((candidate) => candidate.key == card.key);
   }
 
   HeartsGameState togglePause() {
@@ -489,7 +502,8 @@ class HeartsGameState {
       hands: nextHands,
       phase: HeartsPhase.playing,
       selectedPassCards: <String>{},
-      message: '$passDirectionLabel. ${playerLabel(currentPlayer)} leads with 2♣.',
+      message:
+          '$passDirectionLabel. ${playerLabel(currentPlayer)} leads with 2♣.',
     );
   }
 
@@ -539,7 +553,10 @@ class HeartsGameState {
 
     final nextHands = hands.map((hand) => [...hand]).toList();
     nextHands[player].removeWhere((item) => item.key == card.key);
-    final nextTrick = [...currentTrick, HeartsTrickPlay(player: player, card: card)];
+    final nextTrick = [
+      ...currentTrick,
+      HeartsTrickPlay(player: player, card: card),
+    ];
     final brokeHearts = heartsBroken || card.isHeart;
 
     if (nextTrick.length < 4) {
@@ -568,28 +585,40 @@ class HeartsGameState {
     final leadSuit = finishedTrick.first.card.suit;
     HeartsTrickPlay winningPlay = finishedTrick.first;
     for (final play in finishedTrick.skip(1)) {
-      if (play.card.suit == leadSuit && play.card.rank > winningPlay.card.rank) {
+      if (play.card.suit == leadSuit &&
+          play.card.rank > winningPlay.card.rank) {
         winningPlay = play;
       }
     }
 
-    final points = finishedTrick.fold<int>(0, (sum, play) => sum + play.card.pointValue);
+    final points = finishedTrick.fold<int>(
+      0,
+      (sum, play) => sum + play.card.pointValue,
+    );
     final nextHandPoints = [...handPoints];
     nextHandPoints[winningPlay.player] += points;
     final nextTricksWon = [...tricksWon];
     nextTricksWon[winningPlay.player] += 1;
     final nextCompleted = [
       ...completedTricks,
-      HeartsTrick(plays: finishedTrick, winner: winningPlay.player, points: points),
+      HeartsTrick(
+        plays: finishedTrick,
+        winner: winningPlay.player,
+        points: points,
+      ),
     ];
 
     if (nextHands.every((hand) => hand.isEmpty)) {
       final appliedScores = _applyRoundScores(nextHandPoints);
       final nextMatchScores = [
-        for (int index = 0; index < 4; index++) matchScores[index] + appliedScores.$1[index],
+        for (int index = 0; index < 4; index++)
+          matchScores[index] + appliedScores.$1[index],
       ];
-      final matchComplete = nextMatchScores.any((score) => score >= targetScore);
-      final humanLowScore = nextMatchScores[humanPlayer] == nextMatchScores.reduce(min);
+      final matchComplete = nextMatchScores.any(
+        (score) => score >= targetScore,
+      );
+      final humanLowScore =
+          nextMatchScores[humanPlayer] == nextMatchScores.reduce(min);
 
       return copyWith(
         hands: nextHands,
@@ -601,9 +630,13 @@ class HeartsGameState {
         handPoints: nextHandPoints,
         tricksWon: nextTricksWon,
         matchScores: nextMatchScores,
-        phase: matchComplete ? HeartsPhase.matchComplete : HeartsPhase.roundComplete,
+        phase: matchComplete
+            ? HeartsPhase.matchComplete
+            : HeartsPhase.roundComplete,
         message: matchComplete
-            ? (humanLowScore ? 'Match complete. You won the table.' : 'Match complete. Start a rematch?')
+            ? (humanLowScore
+                  ? 'Match complete. You won the table.'
+                  : 'Match complete. Start a rematch?')
             : 'Hand complete. ${playerLabel(winningPlay.player)} took the last trick.',
         lastRoundAppliedScores: appliedScores.$1,
         lastRoundMoonShooter: appliedScores.$2,
@@ -619,7 +652,8 @@ class HeartsGameState {
       heartsBroken: brokeHearts,
       handPoints: nextHandPoints,
       tricksWon: nextTricksWon,
-      message: '${playerLabel(winningPlay.player)} took the trick${points > 0 ? ' for $points point${points == 1 ? '' : 's'}' : ''}.',
+      message:
+          '${playerLabel(winningPlay.player)} took the trick${points > 0 ? ' for $points point${points == 1 ? '' : 's'}' : ''}.',
     );
   }
 
@@ -652,7 +686,8 @@ class HeartsGameState {
     }
 
     final leader = hands.indexWhere(
-      (hand) => hand.any((card) => card.suit == HeartsSuit.clubs && card.rank == 2),
+      (hand) =>
+          hand.any((card) => card.suit == HeartsSuit.clubs && card.rank == 2),
     );
     final passDirection = switch (handNumber % 4) {
       0 => HeartsPassDirection.left,
@@ -680,8 +715,18 @@ class HeartsGameState {
       isPaused: false,
       speed: speed,
       message: passDirection == HeartsPassDirection.hold
-          ? 'Hold hand. ${leader == 0 ? 'You lead 2♣.' : 'Waiting for ${switch (leader) { 1 => 'West', 2 => 'North', 3 => 'East', _ => 'West' }} to lead 2♣.'}'
-          : 'Select three cards to ${switch (passDirection) { HeartsPassDirection.left => 'pass left', HeartsPassDirection.right => 'pass right', HeartsPassDirection.across => 'pass across', HeartsPassDirection.hold => 'hold' }}.',
+          ? 'Hold hand. ${leader == 0 ? 'You lead 2♣.' : 'Waiting for ${switch (leader) {
+                    1 => 'West',
+                    2 => 'North',
+                    3 => 'East',
+                    _ => 'West',
+                  }} to lead 2♣.'}'
+          : 'Select three cards to ${switch (passDirection) {
+              HeartsPassDirection.left => 'pass left',
+              HeartsPassDirection.right => 'pass right',
+              HeartsPassDirection.across => 'pass across',
+              HeartsPassDirection.hold => 'hold',
+            }}.',
       lastRoundAppliedScores: null,
       lastRoundMoonShooter: null,
     );

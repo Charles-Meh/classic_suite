@@ -1,8 +1,8 @@
 import 'dart:convert';
+
 import 'package:classic_suite/games/klondike/card_model.dart';
 import 'package:classic_suite/games/spider/spider_game.dart';
 import 'package:classic_suite/games/spider/spider_game_state.dart';
-import 'package:classic_suite/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -157,7 +157,7 @@ void main() {
   setUpAll(() async {
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
     binding.platformDispatcher.views.first
-      ..physicalSize = const Size(1800, 1200)
+      ..physicalSize = const Size(390, 844)
       ..devicePixelRatio = 1.0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMessageHandler('flutter/assets', _mockAssetHandler);
@@ -175,21 +175,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('launcher shows Spider Solitaire and navigates', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const ClassicSuiteApp());
-
-    expect(find.text('Spider Solitaire'), findsOneWidget);
-
-    await tester.tap(find.text('Spider Solitaire'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(SpiderGame), findsOneWidget);
-    expect(find.text('Spider Solitaire'), findsWidgets);
-  });
-
-  testWidgets('spider hint shows visual source and target', (
+  testWidgets('spider screen shows bottom controls and help dialog', (
     WidgetTester tester,
   ) async {
     final state = _buildSimpleSpiderMoveState();
@@ -197,84 +183,19 @@ void main() {
     await tester.pumpWidget(_buildSpiderHarness(state));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Hint'));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('spider_hint_banner')), findsOneWidget);
-    expect(find.text('Move 6♠ from tableau 2 to tableau 1.'), findsOneWidget);
-    expect(find.byKey(const Key('spider_hint_stock')), findsNothing);
-    expect(find.byKey(const Key('spider_tableau_0_drop_hint')), findsOneWidget);
-  });
-
-  testWidgets('undo and redo both work for spider moves', (
-    WidgetTester tester,
-  ) async {
-    final state = _buildSimpleSpiderMoveState();
-    final movedCard = state.tableau[1].single;
-
-    await tester.pumpWidget(_buildSpiderHarness(state));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('spider_tableau_1_card_0')));
-    await tester.pumpAndSettle();
-
-    expect(state.tableau[1], isEmpty);
-    expect(state.tableau[0].last, movedCard);
-    expect(find.text('Moves 1'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Undo'));
-    await tester.pumpAndSettle();
-
-    expect(state.tableau[0], hasLength(1));
-    expect(state.tableau[1], hasLength(1));
-    expect(state.tableau[1].single.card.value, CardValue.six);
-    expect(find.text('Moves 0'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Redo'));
-    await tester.pumpAndSettle();
-
-    expect(state.tableau[1], isEmpty);
-    expect(state.tableau[0].last.card.value, CardValue.six);
-    expect(find.text('Moves 1'), findsOneWidget);
-  });
-
-  testWidgets('statistics button opens spider stats dialog', (
-    WidgetTester tester,
-  ) async {
-    final state = _buildSimpleSpiderMoveState();
-
-    await tester.pumpWidget(_buildSpiderHarness(state));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Stats'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Spider statistics'), findsOneWidget);
-    expect(find.text('Deals'), findsOneWidget);
-    expect(find.text('Wins'), findsOneWidget);
-    expect(find.text('Current streak'), findsOneWidget);
-  });
-
-  testWidgets('help button opens spider rules dialog', (
-    WidgetTester tester,
-  ) async {
-    final state = _buildSimpleSpiderMoveState();
-
-    await tester.pumpWidget(_buildSpiderHarness(state));
-    await tester.pumpAndSettle();
+    expect(find.text('New Game'), findsOneWidget);
+    expect(find.text('1-suit'), findsOneWidget);
+    expect(find.textContaining('Runs 0/8'), findsNothing);
+    expect(find.textContaining('Deals '), findsNothing);
 
     await tester.tap(find.byTooltip('Help'));
     await tester.pumpAndSettle();
 
     expect(find.text('How to play Spider'), findsOneWidget);
-    expect(find.textContaining('1-suit'), findsWidgets);
-    expect(
-      find.textContaining('Build complete same-suit runs'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('4-suit'), findsWidgets);
   });
 
-  testWidgets('dealing from stock is blocked while a tableau pile is empty', (
+  testWidgets('hint, undo, redo, and stock deal still work', (
     WidgetTester tester,
   ) async {
     final state = _buildSimpleSpiderMoveState();
@@ -289,18 +210,33 @@ void main() {
           ),
         ),
       );
-    state.tableau[4].clear();
 
     await tester.pumpWidget(_buildSpiderHarness(state));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('spider_stock')));
+    await tester.tap(find.byTooltip('Hint'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('spider_hint_banner')), findsOneWidget);
 
-    expect(
-      find.text('Fill every tableau column before dealing a new row.'),
-      findsOneWidget,
-    );
-    expect(state.stock, hasLength(10));
+    await tester.tap(find.byKey(const Key('spider_tableau_1_card_0')));
+    await tester.pumpAndSettle();
+    expect(find.text('Moves 1'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Undo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Moves 0'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Redo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Moves 1'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Undo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Moves 0'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('spider_stock')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(state.stock, isEmpty);
   });
 }

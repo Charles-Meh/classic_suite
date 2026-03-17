@@ -50,3 +50,34 @@ class KlondikeCard {
     }
   }
 }
+
+Map<String, Object?> encodeKlondikeCard(KlondikeCard card) {
+  return {
+    'suit': card.card.suit.name,
+    'value': card.card.value.name,
+    'faceUp': card.faceUp,
+  };
+}
+
+KlondikeCard decodeKlondikeCard(Map<String, dynamic> json) {
+  final suitName = json['suit'] as String? ?? Suit.spades.name;
+  final valueName = json['value'] as String? ?? CardValue.ace.name;
+  return KlondikeCard(
+    PlayingCard(_decodeSuit(suitName), _decodeValue(valueName)),
+    faceUp: json['faceUp'] as bool? ?? false,
+  );
+}
+
+Suit _decodeSuit(String name) {
+  return Suit.values.firstWhere(
+    (candidate) => candidate.name == name,
+    orElse: () => Suit.spades,
+  );
+}
+
+CardValue _decodeValue(String name) {
+  return CardValue.values.firstWhere(
+    (candidate) => candidate.name == name,
+    orElse: () => CardValue.ace,
+  );
+}

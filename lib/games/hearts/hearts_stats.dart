@@ -15,7 +15,8 @@ class HeartsStats {
   final int shootTheMoonCount;
   final int? bestMatchScore;
 
-  double get matchWinRate => matchesStarted == 0 ? 0 : matchesWon / matchesStarted;
+  double get matchWinRate =>
+      matchesStarted == 0 ? 0 : matchesWon / matchesStarted;
 
   HeartsStats copyWith({
     int? matchesStarted,
@@ -35,9 +36,13 @@ class HeartsStats {
     );
   }
 
-  HeartsStats recordMatchStarted() => copyWith(matchesStarted: matchesStarted + 1);
+  HeartsStats recordMatchStarted() =>
+      copyWith(matchesStarted: matchesStarted + 1);
 
-  HeartsStats recordHand({required bool humanWonHand, required bool humanShotMoon}) {
+  HeartsStats recordHand({
+    required bool humanWonHand,
+    required bool humanShotMoon,
+  }) {
     return copyWith(
       handsPlayed: handsPlayed + 1,
       handsWon: handsWon + (humanWonHand ? 1 : 0),
@@ -45,7 +50,10 @@ class HeartsStats {
     );
   }
 
-  HeartsStats recordMatchFinished({required bool humanWonMatch, required int finalScore}) {
+  HeartsStats recordMatchFinished({
+    required bool humanWonMatch,
+    required int finalScore,
+  }) {
     return copyWith(
       matchesWon: matchesWon + (humanWonMatch ? 1 : 0),
       bestMatchScore: bestMatchScore == null || finalScore < bestMatchScore!

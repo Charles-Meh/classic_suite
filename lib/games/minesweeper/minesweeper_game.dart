@@ -4,7 +4,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../shared/animation_constants.dart';
 import '../../shared/duration_format.dart';
+import '../../shared/help_widgets.dart';
+import '../../shared/win_screen.dart';
 import 'minesweeper_game_state.dart';
 import 'minesweeper_stats.dart';
 import 'minesweeper_stats_store.dart';
@@ -18,7 +21,10 @@ class MinesweeperGame extends StatefulWidget {
   State<MinesweeperGame> createState() => _MinesweeperGameState();
 }
 
-class _MinesweeperGameState extends State<MinesweeperGame> {
+enum _MinesweeperMenuAction { newBoard, customBoard, stats, help }
+
+class _MinesweeperGameState extends State<MinesweeperGame>
+    with WidgetsBindingObserver {
   late MinesweeperGameState state;
   final MinesweeperStatsStore _statsStore = MinesweeperStatsStore();
   MinesweeperStats _stats = const MinesweeperStats();
@@ -36,7 +42,10 @@ class _MinesweeperGameState extends State<MinesweeperGame> {
   @override
   void initState() {
     super.initState();
-    state = widget.initialState ?? MinesweeperGameState.newGame(MinesweeperConfig.easy());
+    WidgetsBinding.instance.addObserver(this);
+    state =
+        widget.initialState ??
+        MinesweeperGameState.newGame(MinesweeperConfig.easy());
     if (!state.config.isPreset) {
       _lastCustomConfig = state.config;
     }
@@ -47,8 +56,18 @@ class _MinesweeperGameState extends State<MinesweeperGame> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    if (lifecycleState == AppLifecycleState.inactive ||
+        lifecycleState == AppLifecycleState.paused ||
+        lifecycleState == AppLifecycleState.detached) {
+      _persistState();
+    }
   }
 
   Future<void> _loadState() async {
@@ -206,7 +225,10 @@ class _MinesweeperGameState extends State<MinesweeperGame> {
                 label: 'Win rate',
                 value: '${(_stats.winRate * 100).toStringAsFixed(0)}%',
               ),
-              _StatRow(label: 'Current streak', value: '${_stats.currentStreak}'),
+              _StatRow(
+                label: 'Current streak',
+                value: '${_stats.currentStreak}',
+              ),
               _StatRow(label: 'Best streak', value: '${_stats.bestStreak}'),
               const SizedBox(height: 12),
               _StatRow(
@@ -246,10 +268,34 @@ class _MinesweeperGameState extends State<MinesweeperGame> {
       builder: (context) {
         return AlertDialog(
           title: const Text('How to play'),
-          content: const Text(
-            'Reveal every safe tile. Use flag mode or long-press to mark mines. '
-            'Tap a revealed number to chord-open the surrounding tiles once the right number of flags are in place. '
-            'Your first tap is always safe.',
+          content: const SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                HelpSection(
+                  title: 'Number clue example',
+                  children: [
+                    HelpDiagram(
+                      '□ □ □\n□ 3 □   ← this 3 means exactly three surrounding squares hide mines.\n🚩 □ 🚩',
+                    ),
+                  ],
+                ),
+                HelpSection(
+                  title: 'Core rules',
+                  children: [
+                    HelpBulletList(
+                      items: [
+                        'Reveal every safe tile.',
+                        'Use flag mode or long-press to mark mines.',
+                        'Tap a revealed number to chord-open neighbors once the correct number of flags are placed.',
+                        'Your first tap is always safe.',
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -292,27 +338,31 @@ class _MinesweeperGameState extends State<MinesweeperGame> {
                       initialValue: rowsValue,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(labelText: 'Rows'),
-                      onChanged: (value) => setDialogState(() => rowsValue = value),
+                      onChanged: (value) =>
+                          setDialogState(() => rowsValue = value),
                     ),
                     TextFormField(
                       key: const Key('minesweeper_custom_columns'),
                       initialValue: columnsValue,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(labelText: 'Columns'),
-                      onChanged: (value) => setDialogState(() => columnsValue = value),
+                      onChanged: (value) =>
+                          setDialogState(() => columnsValue = value),
                     ),
                     TextFormField(
                       key: const Key('minesweeper_custom_mines'),
                       initialValue: minesValue,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(labelText: 'Mines'),
-                      onChanged: (value) => setDialogState(() => minesValue = value),
+                      onChanged: (value) =>
+                          setDialogState(() => minesValue = value),
                     ),
                     const SizedBox(height: 12),
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        validationMessage ?? 'Use a board size between 5×5 and 40×40.',
+                        validationMessage ??
+                            'Use a board size between 5×5 and 40×40.',
                         style: TextStyle(
                           color: validationMessage == null
                               ? Theme.of(context).colorScheme.onSurfaceVariant
@@ -364,7 +414,8 @@ class _MinesweeperGameState extends State<MinesweeperGame> {
           ChoiceChip(
             key: Key('minesweeper_difficulty_${config.id}'),
             label: Text(config.label),
-            selected: state.config.id == config.id &&
+            selected:
+                state.config.id == config.id &&
                 (config.id != 'custom' || !state.config.isPreset),
             onSelected: (_) async {
               if (config.id == 'custom') {
@@ -403,30 +454,12 @@ class _MinesweeperGameState extends State<MinesweeperGame> {
                   onPressed: () => _newGame(state.config),
                   icon: const Icon(Icons.restart_alt),
                 ),
-                PopupMenuButton<String>(
-                  tooltip: 'Game menu',
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'new':
-                        await _newGame(state.config);
-                      case 'stats':
-                        await _showStatistics();
-                      case 'help':
-                        await _showHowToPlay();
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'new', child: Text('New board')),
-                    PopupMenuItem(value: 'stats', child: Text('Statistics')),
-                    PopupMenuItem(value: 'help', child: Text('How to play')),
-                  ],
-                ),
               ],
             ),
-            const SizedBox(height: 12),
-            _buildDifficultySelector(),
             const SizedBox(height: 16),
-            Row(
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
               children: [
                 _CounterBadge(
                   label: 'Mines left',
@@ -434,27 +467,149 @@ class _MinesweeperGameState extends State<MinesweeperGame> {
                   icon: Icons.flag_rounded,
                   color: scheme.primaryContainer,
                 ),
-                const SizedBox(width: 12),
                 _CounterBadge(
                   label: 'Time',
                   value: formatElapsedSeconds(state.elapsedSeconds),
                   icon: Icons.timer_outlined,
                   color: scheme.secondaryContainer,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _CounterBadge(
-                    label: 'Best',
-                    value: bestTime == null ? '—' : formatElapsedSeconds(bestTime),
-                    icon: Icons.emoji_events_outlined,
-                    color: scheme.tertiaryContainer,
-                  ),
+                _CounterBadge(
+                  label: 'Best',
+                  value: bestTime == null
+                      ? '—'
+                      : formatElapsedSeconds(bestTime),
+                  icon: Icons.emoji_events_outlined,
+                  color: scheme.tertiaryContainer,
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            Row(
+            _buildDifficultySelector(),
+            const SizedBox(height: 12),
+            AnimatedSwitcher(
+              duration: kHintPulseDuration,
+              child: Text(
+                state.message,
+                key: ValueKey<String>(state.message),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBoard(BuildContext context, BoxConstraints viewportConstraints) {
+    final preferredBoardViewportHeight = switch (state.config.id) {
+      'easy' => 280.0,
+      'medium' => 320.0,
+      'hard' => 300.0,
+      _ => 300.0,
+    };
+    final boardViewportHeight = math.max(
+      180.0,
+      math.min(
+        preferredBoardViewportHeight,
+        viewportConstraints.maxHeight - 320,
+      ),
+    );
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        height: boardViewportHeight,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final media = MediaQuery.of(context).size;
+              final availableWidth = constraints.maxWidth.isFinite
+                  ? constraints.maxWidth
+                  : media.width - 56;
+              final availableHeight = constraints.maxHeight.isFinite
+                  ? constraints.maxHeight
+                  : boardViewportHeight - 24;
+              const spacing = 2.0;
+              const minimumTileSize = 40.0;
+              final preferredMaxTileSize = switch (state.config.id) {
+                'easy' => 64.0,
+                'medium' => 48.0,
+                'hard' => 44.0,
+                _ => 44.0,
+              };
+              final fittedTileSize = math.min(
+                (availableWidth / state.columns) - spacing,
+                (availableHeight / state.rows) - spacing,
+              );
+              final tileSize = fittedTileSize >= minimumTileSize
+                  ? math.min(preferredMaxTileSize, fittedTileSize)
+                  : minimumTileSize;
+              final boardWidth = state.columns * (tileSize + spacing);
+              final boardHeight = state.rows * (tileSize + spacing);
+              final viewportWidth = math.max(availableWidth, boardWidth);
+              final viewportHeight = math.max(availableHeight, boardHeight);
+
+              final board = SizedBox(
+                width: boardWidth,
+                height: boardHeight,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (int row = 0; row < state.rows; row++)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (int column = 0; column < state.columns; column++)
+                            _MinesweeperTile(
+                              key: Key('minesweeper_cell_${row}_$column'),
+                              cell: state.cellAt(row, column),
+                              size: tileSize,
+                              onTap: () => _handleCellTap(row, column),
+                              onLongPress: () =>
+                                  _handleCellLongPress(row, column),
+                            ),
+                        ],
+                      ),
+                  ],
+                ),
+              );
+
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: viewportWidth,
+                  child: SingleChildScrollView(
+                    child: SizedBox(
+                      height: viewportHeight,
+                      child: Center(child: board),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildControls(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
               children: [
+                FilledButton.icon(
+                  onPressed: () => _newGame(state.config),
+                  icon: const Icon(Icons.restart_alt),
+                  label: const Text('Restart'),
+                ),
                 FilterChip(
                   key: const Key('minesweeper_flag_mode'),
                   selected: _flagMode,
@@ -469,17 +624,6 @@ class _MinesweeperGameState extends State<MinesweeperGame> {
                   ),
                   label: Text(_flagMode ? 'Flag mode on' : 'Reveal mode'),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: Text(
-                      state.message,
-                      key: ValueKey<String>(state.message),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                ),
               ],
             ),
           ],
@@ -488,75 +632,113 @@ class _MinesweeperGameState extends State<MinesweeperGame> {
     );
   }
 
-  Widget _buildBoard(BuildContext context) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final availableWidth = constraints.maxWidth.isFinite
-                ? constraints.maxWidth
-                : MediaQuery.of(context).size.width - 56;
-            final tileSize = math.max(
-              14,
-              math.min(34, (availableWidth / state.columns) - 2),
-            ).toDouble();
-            final boardWidth = state.columns * (tileSize + 2);
-            final boardHeight = state.rows * (tileSize + 2);
+  void _backToMenu() {
+    Navigator.of(context).maybePop();
+  }
 
-            return Align(
-              alignment: Alignment.topCenter,
-              child: SizedBox(
-                width: boardWidth,
-                height: boardHeight,
-                child: Column(
-                  children: [
-                    for (int row = 0; row < state.rows; row++)
-                      Row(
-                        children: [
-                          for (int column = 0; column < state.columns; column++)
-                            _MinesweeperTile(
-                              key: Key('minesweeper_cell_${row}_$column'),
-                              cell: state.cellAt(row, column),
-                              size: tileSize,
-                              onTap: () => _handleCellTap(row, column),
-                              onLongPress: () => _handleCellLongPress(row, column),
-                            ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-            );
-          },
+  Widget _buildWinOverlay() {
+    return GameWinScreen(
+      theme: WinScreenTheme.minesweeper,
+      title: 'Minefield Cleared!',
+      subtitle:
+          'Flags wave, the board sweeps clean, and every safe tile is revealed.',
+      stats: [
+        WinScreenStat(
+          label: 'Time',
+          value: formatElapsedSeconds(state.elapsedSeconds),
+          icon: Icons.timer_outlined,
         ),
-      ),
+        WinScreenStat(
+          label: 'Mines',
+          value: '${state.mineCount}',
+          icon: Icons.flag_outlined,
+        ),
+        WinScreenStat(
+          label: 'Wins',
+          value: '${_stats.gamesWon}',
+          icon: Icons.emoji_events_outlined,
+        ),
+      ],
+      onNewGame: () => _newGame(state.config),
+      onBackToMenu: _backToMenu,
+      newGameLabel: 'New Board',
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Minesweeper')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: const Text('Minesweeper'),
+        actions: [
+          PopupMenuButton<_MinesweeperMenuAction>(
+            tooltip: 'Game menu',
+            onSelected: (value) async {
+              switch (value) {
+                case _MinesweeperMenuAction.newBoard:
+                  await _newGame(state.config);
+                case _MinesweeperMenuAction.customBoard:
+                  await _openCustomDialog();
+                case _MinesweeperMenuAction.stats:
+                  await _showStatistics();
+                case _MinesweeperMenuAction.help:
+                  await _showHowToPlay();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: _MinesweeperMenuAction.newBoard,
+                child: Text('New board'),
+              ),
+              PopupMenuItem(
+                value: _MinesweeperMenuAction.customBoard,
+                child: Text('Custom board'),
+              ),
+              PopupMenuItem(
+                value: _MinesweeperMenuAction.stats,
+                child: Text('Statistics'),
+              ),
+              PopupMenuItem(
+                value: _MinesweeperMenuAction.help,
+                child: Text('How to play'),
+              ),
+            ],
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1100),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildHeader(context),
-                        const SizedBox(height: 16),
-                        _buildBoard(context),
-                      ],
-                    ),
-                  ),
-                ),
+              child: LayoutBuilder(
+                builder: (context, viewportConstraints) {
+                  return Stack(
+                    children: [
+                      SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: 1100,
+                              minHeight: viewportConstraints.maxHeight - 32,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildHeader(context),
+                                const SizedBox(height: 16),
+                                _buildBoard(context, viewportConstraints),
+                                const SizedBox(height: 16),
+                                _buildControls(context),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (state.isComplete) _buildWinOverlay(),
+                    ],
+                  );
+                },
               ),
             ),
     );
@@ -671,10 +853,7 @@ class _MinesweeperTile extends StatelessWidget {
     } else if (cell.revealed && cell.adjacentMines > 0) {
       child = Text(
         '${cell.adjacentMines}',
-        style: TextStyle(
-          fontWeight: FontWeight.w800,
-          color: foreground,
-        ),
+        style: TextStyle(fontWeight: FontWeight.w800, color: foreground),
       );
     } else {
       child = const SizedBox.shrink();
@@ -685,10 +864,10 @@ class _MinesweeperTile extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       child: AnimatedScale(
-        duration: const Duration(milliseconds: 130),
+        duration: kMinesweeperRevealDuration,
         scale: revealed ? 0.98 : 1,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
+          duration: kMinesweeperRevealDuration,
           curve: Curves.easeOutCubic,
           width: size,
           height: size,
@@ -713,7 +892,7 @@ class _MinesweeperTile extends StatelessWidget {
           ),
           alignment: Alignment.center,
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 160),
+            duration: kMinesweeperRevealDuration,
             child: SizedBox(
               key: ValueKey<String>(
                 '${cell.revealed}_${cell.flagged}_${cell.hasMine}_${cell.adjacentMines}_${cell.exploded}',

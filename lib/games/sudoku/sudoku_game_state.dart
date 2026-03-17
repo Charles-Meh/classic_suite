@@ -471,8 +471,7 @@ class SudokuGameState {
 
     if (value != solution[row][col]) {
       completed = false;
-      message =
-          'Placed $value. No duplicate conflict, but it is not the final answer.';
+      message = 'Placed $value.';
       return true;
     }
 
@@ -619,17 +618,13 @@ class SudokuGameState {
   bool applyHint() {
     final hint = nextHint();
     if (hint == null) {
-      message =
-          'No simple hint found. Try scanning candidates or use pencil marks.';
+      message = 'No solvable cell is available right now.';
       return false;
     }
 
     selectCell(hint.row, hint.col);
-    final placed = setSelectedValue(hint.value);
-    if (placed) {
-      message = '${hint.label}: ${hint.description}';
-    }
-    return placed;
+    message = 'Hint: this cell can be solved now.';
+    return true;
   }
 
   bool undo() {

@@ -62,7 +62,7 @@ void main() {
     expect(state.board[0][2], 4);
   });
 
-  test('pencil marks can be toggled and auto-filled', () {
+  test('pencil marks can still be toggled and auto-filled in state', () {
     final state = SudokuGameState();
     state.selectCell(0, 2);
 
@@ -78,7 +78,7 @@ void main() {
     expect(state.notesForCell(8, 6), isNotEmpty);
   });
 
-  test('hint finds a valid single and applies it', () {
+  test('hint finds a valid single and only highlights it', () {
     final state = SudokuGameState();
 
     final hint = state.nextHint();
@@ -86,8 +86,10 @@ void main() {
     expect(hint, isNotNull);
     expect(hint!.value, 5);
     expect(state.applyHint(), isTrue);
-    expect(state.board[4][4], 5);
-    expect(state.message, contains('single'));
+    expect(state.board[4][4], 0);
+    expect(state.selectedRow, 4);
+    expect(state.selectedCol, 4);
+    expect(state.message, 'Hint: this cell can be solved now.');
   });
 
   test('difficulty selection filters puzzle pool', () {

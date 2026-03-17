@@ -70,17 +70,25 @@ void main() {
     expect(find.byKey(const Key('hearts_undo')), findsOneWidget);
   });
 
-  testWidgets('passing flow selects three cards and starts play', (tester) async {
+  testWidgets('passing flow selects three cards and starts play', (
+    tester,
+  ) async {
     await tester.pumpWidget(_buildHarness(state: _buildPassingState()));
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byKey(const Key('hearts_human_card_12-spades')));
+    await tester.ensureVisible(
+      find.byKey(const Key('hearts_human_card_12-spades')),
+    );
     await tester.tap(find.byKey(const Key('hearts_human_card_12-spades')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('hearts_human_card_14-hearts')));
+    await tester.ensureVisible(
+      find.byKey(const Key('hearts_human_card_14-hearts')),
+    );
     await tester.tap(find.byKey(const Key('hearts_human_card_14-hearts')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('hearts_human_card_13-diamonds')));
+    await tester.ensureVisible(
+      find.byKey(const Key('hearts_human_card_13-diamonds')),
+    );
     await tester.tap(find.byKey(const Key('hearts_human_card_13-diamonds')));
     await tester.pumpAndSettle();
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:playing_cards/playing_cards.dart';
@@ -21,18 +22,103 @@ const List<CardValue> _spiderValues = [
 ];
 
 class SpiderGameState {
-  SpiderGameState({this.suitMode = 1}) {
-    dealNewGame();
+  static const String storageKey = 'classic_suite.spider.saved_state';
+
+  SpiderGameState({
+    this.suitMode = 1,
+    this.currentSeed,
+    this.elapsedSeconds = 0,
+    this.moveCount = 0,
+    this.score = 500,
+  }) {
+    dealNewGame(seed: currentSeed);
   }
 
-  SpiderGameState._fromSnapshot(this.suitMode);
+  SpiderGameState._fromSnapshot({
+    required this.suitMode,
+    this.currentSeed,
+    this.elapsedSeconds = 0,
+    this.moveCount = 0,
+    this.score = 500,
+  });
 
   int suitMode;
+  int? currentSeed;
+  int elapsedSeconds;
+  int moveCount;
+  int score;
   final List<KlondikeCard> stock = [];
   final List<List<KlondikeCard>> tableau = List.generate(10, (_) => []);
   final List<List<KlondikeCard>> completedRuns = [];
 
+  Map<String, dynamic> toJson() {
+    return {
+      'suitMode': suitMode,
+      'currentSeed': currentSeed,
+      'elapsedSeconds': elapsedSeconds,
+      'moveCount': moveCount,
+      'score': score,
+      'stock': stock.map(encodeKlondikeCard).toList(),
+      'tableau': tableau
+          .map((pile) => pile.map(encodeKlondikeCard).toList())
+          .toList(),
+      'completedRuns': completedRuns
+          .map((pile) => pile.map(encodeKlondikeCard).toList())
+          .toList(),
+    };
+  }
+
+  String encode() => jsonEncode(toJson());
+
+  factory SpiderGameState.fromJson(Map<String, dynamic> json) {
+    final state = SpiderGameState._fromSnapshot(
+      suitMode: (json['suitMode'] as num?)?.toInt() ?? 1,
+      currentSeed: (json['currentSeed'] as num?)?.toInt(),
+      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
+      moveCount: (json['moveCount'] as num?)?.toInt() ?? 0,
+      score: (json['score'] as num?)?.toInt() ?? 500,
+    );
+    state._replaceFromJsonPile(state.stock, json['stock']);
+    state._replacePileListFromJson(state.tableau, json['tableau']);
+    state.completedRuns
+      ..clear()
+      ..addAll(
+        ((json['completedRuns'] as List<dynamic>?) ?? const [])
+            .map((pile) => state._decodePile(pile))
+            .toList(),
+      );
+    return state;
+  }
+
+  static SpiderGameState? tryDecode(String? raw) {
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return SpiderGameState.fromJson(decoded);
+      }
+      if (decoded is Map) {
+        return SpiderGameState.fromJson(decoded.cast<String, dynamic>());
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
+  void incrementElapsed() {
+    if (!isWon) {
+      elapsedSeconds += 1;
+    }
+  }
+
   void dealNewGame({int? seed}) {
+    currentSeed = seed;
+    elapsedSeconds = 0;
+    moveCount = 0;
+    score = 500;
     _populateStock(seed: seed);
     _dealOpeningTableau();
     completedRuns.clear();
@@ -43,7 +129,13 @@ class SpiderGameState {
   }
 
   SpiderGameState copy() {
-    final snapshot = SpiderGameState._fromSnapshot(suitMode);
+    final snapshot = SpiderGameState._fromSnapshot(
+      suitMode: suitMode,
+      currentSeed: currentSeed,
+      elapsedSeconds: elapsedSeconds,
+      moveCount: moveCount,
+      score: score,
+    );
     snapshot.stock.addAll(stock.map(_copyCard));
     for (int i = 0; i < tableau.length; i++) {
       snapshot.tableau[i].addAll(tableau[i].map(_copyCard));
@@ -56,6 +148,10 @@ class SpiderGameState {
 
   void restoreFrom(SpiderGameState snapshot) {
     suitMode = snapshot.suitMode;
+    currentSeed = snapshot.currentSeed;
+    elapsedSeconds = snapshot.elapsedSeconds;
+    moveCount = snapshot.moveCount;
+    score = snapshot.score;
     _replaceCards(stock, snapshot.stock);
     for (int i = 0; i < tableau.length; i++) {
       _replaceCards(tableau[i], snapshot.tableau[i]);
@@ -125,6 +221,8 @@ class SpiderGameState {
     }
     targetPile.addAll(cards);
     _removeCompletedRunIfPresent(targetPile);
+    moveCount += 1;
+    score = max(0, score - 1);
     return true;
   }
 
@@ -144,6 +242,8 @@ class SpiderGameState {
       pile.add(card);
       _removeCompletedRunIfPresent(pile);
     }
+    moveCount += 1;
+    score = max(0, score - 1);
     return true;
   }
 
@@ -233,6 +333,29 @@ class SpiderGameState {
     target
       ..clear()
       ..addAll(source.map(_copyCard));
+  }
+
+  List<KlondikeCard> _decodePile(dynamic pile) {
+    return ((pile as List<dynamic>?) ?? const [])
+        .whereType<Map>()
+        .map((card) => decodeKlondikeCard(card.cast<String, dynamic>()))
+        .toList();
+  }
+
+  void _replaceFromJsonPile(List<KlondikeCard> target, dynamic source) {
+    target
+      ..clear()
+      ..addAll(_decodePile(source));
+  }
+
+  void _replacePileListFromJson(
+    List<List<KlondikeCard>> target,
+    dynamic source,
+  ) {
+    final piles = source as List<dynamic>? ?? const [];
+    for (int i = 0; i < target.length; i++) {
+      _replaceFromJsonPile(target[i], i < piles.length ? piles[i] : null);
+    }
   }
 
   List<KlondikeCard>? _findTableauPileContaining(KlondikeCard card) {
@@ -326,6 +449,7 @@ class SpiderGameState {
     completedRuns.add(candidate.map(_copyCard).toList());
     pile.removeRange(pile.length - 13, pile.length);
     _flipExposedCard(pile);
+    score += 100;
   }
 
   void _flipExposedCard(List<KlondikeCard> pile) {

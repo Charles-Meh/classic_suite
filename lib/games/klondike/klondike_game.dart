@@ -1,7 +1,14 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:playing_cards/playing_cards.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../shared/animation_constants.dart';
+import '../../shared/duration_format.dart';
+import '../../shared/help_widgets.dart';
+import '../../shared/win_screen.dart';
 
 import 'card_model.dart';
 import 'game_state.dart';
@@ -11,7 +18,7 @@ import 'klondike_stats.dart';
 import 'klondike_stats_store.dart';
 import 'winnable_seed_corpus.dart';
 
-/// Main widget for the Klondike Klondike game. All game logic and rendering
+/// Main widget for the Klondike Solitaire game. All game logic and rendering
 /// lives here; the state object contains the current tableau, stock, waste,
 /// and foundations.
 class KlondikeGame extends StatefulWidget {
@@ -23,7 +30,10 @@ class KlondikeGame extends StatefulWidget {
   State<KlondikeGame> createState() => _KlondikeGameState();
 }
 
-class _KlondikeGameState extends State<KlondikeGame> {
+class _KlondikeGameState extends State<KlondikeGame>
+    with WidgetsBindingObserver {
+  static const Duration _saveInterval = Duration(seconds: 15);
+
   late GameState state;
   late GameState _initialDealState;
   final List<GameState> _history = [];
@@ -31,19 +41,146 @@ class _KlondikeGameState extends State<KlondikeGame> {
   final KlondikeStatsStore _statsStore = KlondikeStatsStore();
   _ActiveTableauDrag? _activeTableauDrag;
   KlondikeSuggestion? _activeHint;
+  Timer? _ticker;
+  Timer? _periodicSaveTimer;
+  bool _loading = true;
   bool _isWasteDragging = false;
   bool _isAutocompleteRunning = false;
   bool _hasRecordedCurrentWin = false;
   KlondikeStats _stats = const KlondikeStats();
-  _DealMode _dealMode = _DealMode.random;
+  _DealMode _dealMode = _DealMode.winning;
 
   @override
   void initState() {
     super.initState();
-    state = widget.initialState ?? GameState();
+    WidgetsBinding.instance.addObserver(this);
+    state = widget.initialState?.copy() ?? GameState(drawCount: 1);
+    if (widget.initialState == null) {
+      final seed = _winnableSeedCorpus.nextSeed(drawCount: state.drawCount);
+      state.dealWinnableGame(seed);
+    }
     _initialDealState = state.copy();
     _hasRecordedCurrentWin = state.isWon;
-    _loadStats();
+    _loadGame();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _ticker?.cancel();
+    _periodicSaveTimer?.cancel();
+    _persistState();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    if (lifecycleState == AppLifecycleState.inactive ||
+        lifecycleState == AppLifecycleState.paused ||
+        lifecycleState == AppLifecycleState.detached) {
+      _persistState();
+    }
+  }
+
+  Future<void> _loadGame() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = widget.initialState == null
+        ? GameState.tryDecode(prefs.getString(GameState.storageKey))
+        : null;
+    final loadedStats = await _statsStore.load();
+    if (!mounted) {
+      return;
+    }
+
+    if (saved != null) {
+      final shouldResume = await _showResumeDialog(saved) ?? false;
+      if (!mounted) {
+        return;
+      }
+      if (shouldResume) {
+        state = saved;
+      } else {
+        await prefs.remove(GameState.storageKey);
+      }
+    }
+
+    final nextStats = widget.initialState == null && saved == null
+        ? loadedStats.recordDealStarted()
+        : loadedStats;
+    await _statsStore.save(nextStats);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _stats = nextStats;
+      _initialDealState = state.copy();
+      _hasRecordedCurrentWin = state.isWon;
+      _loading = false;
+    });
+    _syncTimers();
+    if (saved == null) {
+      await _persistState();
+    }
+  }
+
+  Future<bool?> _showResumeDialog(GameState saved) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Resume Game?'),
+          content: Text(
+            'Resume your saved Klondike game?\n\nMoves ${saved.moveCount} • Time ${formatElapsedSeconds(saved.elapsedSeconds)}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('New deal'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Resume'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _syncTimers() {
+    _ticker?.cancel();
+    if (!state.isWon) {
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted || state.isWon) {
+          return;
+        }
+        setState(() {
+          state.incrementElapsed();
+        });
+        _persistState();
+      });
+    }
+
+    _periodicSaveTimer?.cancel();
+    _periodicSaveTimer = Timer.periodic(_saveInterval, (_) => _persistState());
+  }
+
+  Future<void> _persistState() async {
+    if (widget.initialState != null || _loading || state.isWon) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(GameState.storageKey, state.encode());
+  }
+
+  Future<void> _clearSavedState() async {
+    if (widget.initialState != null) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(GameState.storageKey);
   }
 
   Future<void> _loadStats() async {
@@ -117,6 +254,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
 
     if (changed) {
       _maybeRecordWin();
+      _persistState();
     }
     return changed;
   }
@@ -131,6 +269,8 @@ class _KlondikeGameState extends State<KlondikeGame> {
       _stats = nextStats;
     });
     _statsStore.save(nextStats);
+    _clearSavedState();
+    _syncTimers();
   }
 
   void _recordStartedDeal({required bool resetStreak}) {
@@ -187,6 +327,8 @@ class _KlondikeGameState extends State<KlondikeGame> {
       _isWasteDragging = false;
       _hasRecordedCurrentWin = state.isWon;
     });
+    _syncTimers();
+    _persistState();
   }
 
   void _restartDeal() {
@@ -202,6 +344,8 @@ class _KlondikeGameState extends State<KlondikeGame> {
       _isAutocompleteRunning = false;
       _hasRecordedCurrentWin = state.isWon;
     });
+    _syncTimers();
+    _persistState();
   }
 
   void _dealNewGame({int? drawCount, _DealMode? dealMode}) {
@@ -232,6 +376,9 @@ class _KlondikeGameState extends State<KlondikeGame> {
       _hasRecordedCurrentWin = false;
     });
     _recordStartedDeal(resetStreak: shouldResetStreak);
+    _clearSavedState();
+    _syncTimers();
+    _persistState();
   }
 
   bool get _canAutocomplete {
@@ -262,7 +409,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
         break;
       }
       movedAny = true;
-      await Future<void>.delayed(const Duration(milliseconds: 70));
+      await Future<void>.delayed(kCardAutoMoveDuration);
     }
 
     if (!mounted) {
@@ -277,11 +424,12 @@ class _KlondikeGameState extends State<KlondikeGame> {
       _isAutocompleteRunning = false;
     });
     _maybeRecordWin();
+    _persistState();
   }
 
   Widget _buildAutocompleteButton() {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 180),
+      duration: kCardHighlightDuration,
       child: _canAutocomplete
           ? FilledButton.icon(
               key: const Key('autocomplete_button'),
@@ -306,7 +454,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Klondike Klondike settings'),
+              title: const Text('Klondike Solitaire settings'),
               content: SizedBox(
                 width: 360,
                 child: SingleChildScrollView(
@@ -423,7 +571,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Klondike Klondike statistics'),
+          title: const Text('Klondike Solitaire statistics'),
           content: SizedBox(
             width: 340,
             child: Column(
@@ -555,6 +703,92 @@ class _KlondikeGameState extends State<KlondikeGame> {
     }
   }
 
+  Future<void> _openHelp() async {
+    if (!mounted) {
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('How to play Klondike Solitaire'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  HelpSection(
+                    title: 'Layout',
+                    children: [
+                      HelpDiagram(
+                        '[Stock] [Waste]     [A♣] [A♦] [A♥] [A♠]\n\n'
+                        'T1   T2   T3   T4   T5   T6   T7\n'
+                        'K♣\n'
+                        'Q♦  9♣\n'
+                        'J♣  8♥  4♠\n\n'
+                        'Tableau builds down in alternating colors. Foundations build up by suit.',
+                      ),
+                    ],
+                  ),
+                  HelpSection(
+                    title: 'Goal',
+                    children: [
+                      Text(
+                        'Build the four foundation piles from Ace to King, one suit per pile.',
+                      ),
+                    ],
+                  ),
+                  HelpSection(
+                    title: 'Tableau rules',
+                    children: [
+                      HelpBulletList(
+                        items: [
+                          'Build downward in alternating colors.',
+                          'Only Kings can move to an empty tableau column.',
+                          'You can drag a face-up run as a stack.',
+                          'When a face-down card is uncovered, it flips up automatically.',
+                        ],
+                      ),
+                    ],
+                  ),
+                  HelpSection(
+                    title: 'Stock and waste',
+                    children: [
+                      Text(
+                        'Tap the stock to draw cards into the waste. When the stock is empty, tap it again to recycle the waste back into the stock.',
+                      ),
+                    ],
+                  ),
+                  HelpSection(
+                    title: 'Helpful tips',
+                    children: [
+                      HelpBulletList(
+                        items: [
+                          'Move Aces and Twos to the foundations early when it is safe.',
+                          'Empty columns are valuable because only Kings can fill them.',
+                          'Use Hint if you get stuck, and Undo if you want to back up a move.',
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _cardWidget(
     KlondikeCard card,
     _KlondikeLayoutMetrics metrics, {
@@ -569,13 +803,9 @@ class _KlondikeGameState extends State<KlondikeGame> {
       child: SizedBox(
         width: metrics.cardWidth,
         height: metrics.cardHeight,
-        child: PlayingCardView(
-          card: card.card,
-          showBack: !card.faceUp,
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(metrics.cornerRadius),
-          ),
+        child: _KlondikeCardView(
+          card: card,
+          cornerRadius: metrics.cornerRadius,
         ),
       ),
     );
@@ -649,7 +879,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
     final decoration = _hintDecoration(role);
     return AnimatedContainer(
       key: key,
-      duration: const Duration(milliseconds: 180),
+      duration: kCardHighlightDuration,
       curve: Curves.easeOutCubic,
       padding: padding,
       decoration: decoration == null
@@ -699,10 +929,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
     }
   }
 
-  Widget _buildStack(
-    List<KlondikeCard> cards,
-    _KlondikeLayoutMetrics metrics,
-  ) {
+  Widget _buildStack(List<KlondikeCard> cards, _KlondikeLayoutMetrics metrics) {
     if (cards.isEmpty) {
       return SizedBox(width: metrics.cardWidth, height: metrics.cardHeight);
     }
@@ -738,7 +965,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
         padding: const EdgeInsets.all(2),
         child: topFaceDown != null
             ? _cardWidget(topFaceDown, metrics)
-            : _buildSlotPlaceholder(metrics, label: 'STK', role: role),
+            : _buildSlotPlaceholder(metrics, role: role),
       ),
     );
   }
@@ -751,7 +978,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
         role: role,
         borderRadius: BorderRadius.circular(metrics.cornerRadius + 4),
         padding: const EdgeInsets.all(2),
-        child: _buildSlotPlaceholder(metrics, label: 'WST', role: role),
+        child: _buildSlotPlaceholder(metrics, role: role),
       );
     }
 
@@ -771,7 +998,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
         role: role,
         borderRadius: BorderRadius.circular(metrics.cornerRadius + 4),
         padding: const EdgeInsets.all(2),
-        child: _buildSlotPlaceholder(metrics, label: 'WST', role: role),
+        child: _buildSlotPlaceholder(metrics, role: role),
       );
     }
 
@@ -853,7 +1080,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
         color: Colors.transparent,
         child: _cardWidget(card, metrics),
       ),
-      childWhenDragging: const SizedBox.shrink(),
+      childWhenDragging: _buildSlotPlaceholder(metrics),
       child: GestureDetector(
         onTap: () => _handleCardTap(card),
         child: _cardWidget(card, metrics, role: _hintRoleForCard(card)),
@@ -961,13 +1188,13 @@ class _KlondikeGameState extends State<KlondikeGame> {
           borderRadius: BorderRadius.circular(metrics.cornerRadius + 6),
           padding: const EdgeInsets.all(2),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
+            duration: kCardDropDuration,
             width: metrics.cardWidth,
             height: math.max(regionHeight, pileHeight),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(metrics.cornerRadius),
             ),
-            child: pile.isEmpty
+            child: visibleCards.isEmpty
                 ? Align(
                     alignment: Alignment.topCenter,
                     child: _buildSlotPlaceholder(
@@ -975,7 +1202,6 @@ class _KlondikeGameState extends State<KlondikeGame> {
                       key: hintRole == _HintRole.target
                           ? Key('hint_target_tableau_$pileIndex')
                           : null,
-                      label: 'K',
                       highlight: dragHighlight,
                       role: hintRole,
                     ),
@@ -1066,6 +1292,69 @@ class _KlondikeGameState extends State<KlondikeGame> {
     );
   }
 
+  Widget _buildBottomControls() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 10,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        alignment: WrapAlignment.spaceBetween,
+        children: [
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment<int>(value: 1, label: Text('Draw 1')),
+              ButtonSegment<int>(value: 3, label: Text('Draw 3')),
+            ],
+            selected: {state.drawCount},
+            onSelectionChanged: _isAutocompleteRunning
+                ? null
+                : (selection) {
+                    final value = selection.first;
+                    if (value == state.drawCount) {
+                      return;
+                    }
+                    _dealNewGame(drawCount: value);
+                  },
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Winning deal',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.95),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Switch.adaptive(
+                value: _dealMode == _DealMode.winning,
+                onChanged: _isAutocompleteRunning
+                    ? null
+                    : (value) {
+                        final nextMode = value
+                            ? _DealMode.winning
+                            : _DealMode.random;
+                        if (nextMode == _dealMode) {
+                          return;
+                        }
+                        _dealNewGame(dealMode: nextMode);
+                      },
+              ),
+            ],
+          ),
+          _buildAutocompleteButton(),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatusChip(String label, {IconData? icon}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1096,7 +1385,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
   Widget _buildHintBanner() {
     final hint = _activeHint;
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 180),
+      duration: kCardHighlightDuration,
       child: hint == null
           ? const SizedBox.shrink()
           : Container(
@@ -1239,7 +1528,7 @@ class _KlondikeGameState extends State<KlondikeGame> {
   }
 
   String _foundationLabel(int index) {
-    const labels = ['C', 'D', 'H', 'S'];
+    const labels = ['♣', '♦', '♥', '♠'];
     return labels[index];
   }
 
@@ -1251,137 +1540,37 @@ class _KlondikeGameState extends State<KlondikeGame> {
     return tallest;
   }
 
-  Widget _buildWinOverlay(_KlondikeLayoutMetrics metrics) {
-    final panelWidth = math.min(metrics.cardWidth * 5.8, 420.0);
-
-    return Positioned.fill(
-      child: IgnorePointer(
-        ignoring: false,
-        child: Container(
-          key: const Key('win_overlay'),
-          color: Colors.black.withValues(alpha: 0.28),
-          alignment: Alignment.center,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.92, end: 1.0),
-            duration: const Duration(milliseconds: 280),
-            curve: Curves.easeOutBack,
-            builder: (context, scale, child) {
-              return Transform.scale(scale: scale, child: child);
-            },
-            child: Container(
-              width: panelWidth,
-              padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFFF7E39B),
-                    Color(0xFFF3C65E),
-                    Color(0xFFE0A93B),
-                  ],
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x66000000),
-                    blurRadius: 28,
-                    offset: Offset(0, 18),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildWinSparkle(delay: 0, icon: Icons.auto_awesome),
-                      SizedBox(width: metrics.groupSpacing),
-                      Container(
-                        width: metrics.cardWidth * 1.18,
-                        height: metrics.cardWidth * 1.18,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.28),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.workspace_premium,
-                          size: 40,
-                          color: Color(0xFF7A4A00),
-                        ),
-                      ),
-                      SizedBox(width: metrics.groupSpacing),
-                      _buildWinSparkle(delay: 120, icon: Icons.stars_rounded),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    'You won',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: math.max(28, metrics.cardWidth * 0.56),
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.6,
-                      color: const Color(0xFF4E2D00),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Every card is home. Start a fresh Klondike deal whenever you are ready.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: math.max(14, metrics.cardWidth * 0.22),
-                      height: 1.35,
-                      color: const Color(0xFF6A4300),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Wins ${_stats.wins} • Streak ${_stats.currentStreak}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: math.max(13, metrics.cardWidth * 0.2),
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF6A4300),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _dealNewGame,
-                      icon: const Icon(Icons.casino_outlined),
-                      label: const Text('New deal'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF14532D),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+  void _backToMenu() {
+    Navigator.of(context).maybePop();
   }
 
-  Widget _buildWinSparkle({required int delay, required IconData icon}) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 600 + delay),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        final offset = 10 * (1 - value);
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(offset: Offset(0, -offset), child: child),
-        );
-      },
-      child: Icon(icon, color: const Color(0xFF7A4A00), size: 26),
+  Widget _buildWinOverlay(_KlondikeLayoutMetrics metrics) {
+    return GameWinScreen(
+      key: const Key('win_overlay'),
+      theme: WinScreenTheme.klondike,
+      title: 'You Win!',
+      subtitle:
+          'Cards are flying home. Deal another Klondike round when you are ready.',
+      stats: [
+        WinScreenStat(
+          label: 'Wins',
+          value: '${_stats.wins}',
+          icon: Icons.emoji_events_outlined,
+        ),
+        WinScreenStat(
+          label: 'Streak',
+          value: '${_stats.currentStreak}',
+          icon: Icons.local_fire_department_outlined,
+        ),
+        WinScreenStat(
+          label: 'Draw',
+          value: '${state.drawCount}',
+          icon: Icons.layers_outlined,
+        ),
+      ],
+      onNewGame: _dealNewGame,
+      onBackToMenu: _backToMenu,
+      newGameLabel: 'New Deal',
     );
   }
 
@@ -1389,8 +1578,15 @@ class _KlondikeGameState extends State<KlondikeGame> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Klondike Klondike'),
+        centerTitle: true,
+        title: const Text('Klondike Solitaire'),
         actions: [
+          IconButton(
+            key: const Key('klondike_help'),
+            tooltip: 'Help',
+            onPressed: _openHelp,
+            icon: const Icon(Icons.help_outline),
+          ),
           IconButton(
             tooltip: 'Hint',
             onPressed: _isAutocompleteRunning ? null : _showHint,
@@ -1427,114 +1623,274 @@ class _KlondikeGameState extends State<KlondikeGame> {
           ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1E6B43), Color(0xFF14532D)],
-          ),
-        ),
-        child: SafeArea(
-          minimum: const EdgeInsets.all(8),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final metrics = _KlondikeLayoutMetrics.fromWidth(
-                constraints.maxWidth,
-              );
-              final tableauHeight = _tableauRegionHeight(metrics);
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF1E6B43), Color(0xFF14532D)],
+                ),
+              ),
+              child: SafeArea(
+                minimum: const EdgeInsets.all(8),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final metrics = _KlondikeLayoutMetrics.fromWidth(
+                      constraints.maxWidth,
+                    );
+                    final tableauHeight = _tableauRegionHeight(metrics);
 
-              return Stack(
-                children: [
-                  Column(
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _buildStock(metrics),
-                              SizedBox(width: metrics.groupSpacing),
-                              _buildWaste(metrics),
-                            ],
-                          ),
-                          const Spacer(),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              for (int i = 0; i < 4; i++) ...[
-                                if (i > 0)
-                                  SizedBox(width: metrics.foundationSpacing),
-                                _buildFoundation(i, metrics),
+                    return Stack(
+                      children: [
+                        Column(
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildStock(metrics),
+                                    SizedBox(width: metrics.groupSpacing),
+                                    _buildWaste(metrics),
+                                  ],
+                                ),
+                                const Spacer(),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    for (int i = 0; i < 4; i++) ...[
+                                      if (i > 0)
+                                        SizedBox(
+                                          width: metrics.foundationSpacing,
+                                        ),
+                                      _buildFoundation(i, metrics),
+                                    ],
+                                  ],
+                                ),
                               ],
-                            ],
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: metrics.groupSpacing),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Wrap(
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
                               spacing: 8,
                               runSpacing: 8,
                               children: [
+                                _buildStatusChip('Moves ${state.moveCount}'),
                                 _buildStatusChip(
-                                  state.drawCount == 1 ? 'Draw 1' : 'Draw 3',
-                                  icon: Icons.style_outlined,
+                                  'Score ${state.score}',
+                                  icon: Icons.emoji_events_outlined,
                                 ),
                                 _buildStatusChip(
-                                  _dealMode == _DealMode.random
-                                      ? 'Random deal'
-                                      : 'Winning deal',
-                                  icon: _dealMode == _DealMode.random
-                                      ? Icons.shuffle
-                                      : Icons.verified_outlined,
+                                  formatElapsedSeconds(state.elapsedSeconds),
+                                  icon: Icons.timer_outlined,
                                 ),
+                                if (state.currentSeed != null)
+                                  _buildStatusChip('Seed ${state.currentSeed}'),
                               ],
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          _buildAutocompleteButton(),
-                        ],
-                      ),
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOutCubic,
-                        child: _activeHint == null
-                            ? const SizedBox.shrink()
-                            : Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: _buildHintBanner(),
+                            AnimatedSize(
+                              duration: kCardHighlightDuration,
+                              curve: Curves.easeOutCubic,
+                              child: _activeHint == null
+                                  ? const SizedBox.shrink()
+                                  : Padding(
+                                      padding: const EdgeInsets.only(top: 12),
+                                      child: _buildHintBanner(),
+                                    ),
+                            ),
+                            SizedBox(height: metrics.sectionSpacing),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: SizedBox(
+                                  height: tableauHeight,
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      for (int i = 0; i < 7; i++) ...[
+                                        if (i > 0)
+                                          SizedBox(
+                                            width: metrics.tableauSpacing,
+                                          ),
+                                        _buildTableauPile(
+                                          i,
+                                          metrics,
+                                          tableauHeight,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
                               ),
-                      ),
-                      SizedBox(height: metrics.sectionSpacing),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: SizedBox(
-                            height: tableauHeight,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                for (int i = 0; i < 7; i++) ...[
-                                  if (i > 0)
-                                    SizedBox(width: metrics.tableauSpacing),
-                                  _buildTableauPile(i, metrics, tableauHeight),
-                                ],
-                              ],
                             ),
-                          ),
+                            _buildBottomControls(),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                  if (state.isWon) _buildWinOverlay(metrics),
-                ],
-              );
-            },
+                        if (state.isWon) _buildWinOverlay(metrics),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+class _KlondikeCardView extends StatelessWidget {
+  const _KlondikeCardView({required this.card, required this.cornerRadius});
+
+  final KlondikeCard card;
+  final double cornerRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!card.faceUp) {
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(cornerRadius),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF1B4D9C), Color(0xFF143C7B)],
           ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.85)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 6,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Container(
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(cornerRadius - 2),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final isRed =
+        card.card.suit == Suit.hearts || card.card.suit == Suit.diamonds;
+    final color = isRed ? const Color(0xFFC62828) : const Color(0xFF1A1A1A);
+    final rank = switch (card.card.value) {
+      CardValue.ace => 'A',
+      CardValue.two => '2',
+      CardValue.three => '3',
+      CardValue.four => '4',
+      CardValue.five => '5',
+      CardValue.six => '6',
+      CardValue.seven => '7',
+      CardValue.eight => '8',
+      CardValue.nine => '9',
+      CardValue.ten => '10',
+      CardValue.jack => 'J',
+      CardValue.queen => 'Q',
+      CardValue.king => 'K',
+      _ => '?',
+    };
+    final suit = switch (card.card.suit) {
+      Suit.clubs => '♣',
+      Suit.diamonds => '♦',
+      Suit.hearts => '♥',
+      Suit.spades => '♠',
+      _ => '?',
+    };
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(cornerRadius),
+        border: Border.all(color: const Color(0xFFD6D6D6)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x22000000),
+            blurRadius: 5,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
+        child: Stack(
+          children: [
+            Align(
+              alignment: Alignment.topLeft,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    rank,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: rank == '10' ? 16 : 18,
+                      fontWeight: FontWeight.w800,
+                      height: 0.95,
+                    ),
+                  ),
+                  Text(
+                    suit,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      height: 0.95,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Center(
+              child: Text(
+                suit,
+                style: TextStyle(
+                  color: color.withValues(alpha: 0.9),
+                  fontSize: 38,
+                  fontWeight: FontWeight.w700,
+                  height: 1,
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: RotatedBox(
+                quarterTurns: 2,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      rank,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: rank == '10' ? 16 : 18,
+                        fontWeight: FontWeight.w800,
+                        height: 0.95,
+                      ),
+                    ),
+                    Text(
+                      suit,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        height: 0.95,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

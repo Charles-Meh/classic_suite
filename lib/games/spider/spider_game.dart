@@ -1,8 +1,15 @@
+import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:playing_cards/playing_cards.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../shared/animation_constants.dart';
+import '../../shared/duration_format.dart';
+import '../../shared/help_widgets.dart';
+import '../../shared/win_screen.dart';
 import '../klondike/card_model.dart';
 import 'spider_advisor.dart';
 import 'spider_game_state.dart';
@@ -18,7 +25,9 @@ class SpiderGame extends StatefulWidget {
   State<SpiderGame> createState() => _SpiderGameState();
 }
 
-class _SpiderGameState extends State<SpiderGame> {
+class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
+  static const Duration _saveInterval = Duration(seconds: 15);
+
   late SpiderGameState state;
   late SpiderGameState _initialDealState;
   final List<SpiderGameState> _history = [];
@@ -26,16 +35,140 @@ class _SpiderGameState extends State<SpiderGame> {
   final SpiderStatsStore _statsStore = SpiderStatsStore();
   _ActiveSpiderDrag? _activeTableauDrag;
   SpiderSuggestion? _activeHint;
+  Timer? _ticker;
+  Timer? _periodicSaveTimer;
   SpiderStats _stats = const SpiderStats();
+  bool _loading = true;
   bool _hasRecordedCurrentWin = false;
+  int _dealAnimationNonce = 0;
 
   @override
   void initState() {
     super.initState();
-    state = widget.initialState ?? SpiderGameState();
+    WidgetsBinding.instance.addObserver(this);
+    state = widget.initialState?.copy() ?? SpiderGameState();
     _initialDealState = state.copy();
     _hasRecordedCurrentWin = state.isWon;
-    _loadStats();
+    _loadGame();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _ticker?.cancel();
+    _periodicSaveTimer?.cancel();
+    _persistState();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    if (lifecycleState == AppLifecycleState.inactive ||
+        lifecycleState == AppLifecycleState.paused ||
+        lifecycleState == AppLifecycleState.detached) {
+      _persistState();
+    }
+  }
+
+  Future<void> _loadGame() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = widget.initialState == null
+        ? SpiderGameState.tryDecode(prefs.getString(SpiderGameState.storageKey))
+        : null;
+    final loadedStats = await _statsStore.load();
+    if (!mounted) {
+      return;
+    }
+
+    if (saved != null) {
+      final shouldResume = await _showResumeDialog(saved) ?? false;
+      if (!mounted) {
+        return;
+      }
+      if (shouldResume) {
+        state = saved;
+      } else {
+        await prefs.remove(SpiderGameState.storageKey);
+      }
+    }
+
+    final nextStats = widget.initialState == null && saved == null
+        ? loadedStats.recordDealStarted()
+        : loadedStats;
+    await _statsStore.save(nextStats);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _stats = nextStats;
+      _initialDealState = state.copy();
+      _hasRecordedCurrentWin = state.isWon;
+      _loading = false;
+    });
+    _syncTimers();
+    if (saved == null) {
+      await _persistState();
+    }
+  }
+
+  Future<bool?> _showResumeDialog(SpiderGameState saved) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Resume Game?'),
+          content: Text(
+            'Resume your saved Spider game?\n\nMoves ${saved.moveCount} • Time ${formatElapsedSeconds(saved.elapsedSeconds)}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('New deal'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Resume'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _syncTimers() {
+    _ticker?.cancel();
+    if (!state.isWon) {
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted || state.isWon) {
+          return;
+        }
+        setState(() {
+          state.incrementElapsed();
+        });
+        _persistState();
+      });
+    }
+
+    _periodicSaveTimer?.cancel();
+    _periodicSaveTimer = Timer.periodic(_saveInterval, (_) => _persistState());
+  }
+
+  Future<void> _persistState() async {
+    if (widget.initialState != null || _loading || state.isWon) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(SpiderGameState.storageKey, state.encode());
+  }
+
+  Future<void> _clearSavedState() async {
+    if (widget.initialState != null) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(SpiderGameState.storageKey);
   }
 
   Future<void> _loadStats() async {
@@ -93,6 +226,7 @@ class _SpiderGameState extends State<SpiderGame> {
     });
     if (changed) {
       _maybeRecordWin();
+      _persistState();
     }
     return changed;
   }
@@ -107,6 +241,8 @@ class _SpiderGameState extends State<SpiderGame> {
       _stats = nextStats;
     });
     _statsStore.save(nextStats);
+    _clearSavedState();
+    _syncTimers();
   }
 
   void _recordStartedDeal({required bool resetStreak}) {
@@ -121,9 +257,19 @@ class _SpiderGameState extends State<SpiderGame> {
     _statsStore.save(nextStats);
   }
 
+  void _triggerDealAnimation() {
+    setState(() {
+      _dealAnimationNonce++;
+    });
+  }
+
   void _handleStockTap() {
     final changed = _runRecordedMutation(state.dealFromStock);
-    if (!changed && state.stock.isNotEmpty) {
+    if (changed) {
+      _triggerDealAnimation();
+      return;
+    }
+    if (state.stock.isNotEmpty) {
       _showMessage('Fill every tableau column before dealing a new row.');
     }
   }
@@ -148,6 +294,8 @@ class _SpiderGameState extends State<SpiderGame> {
       _activeTableauDrag = null;
       _hasRecordedCurrentWin = state.isWon;
     });
+    _syncTimers();
+    _persistState();
   }
 
   void _redoMove() {
@@ -188,6 +336,7 @@ class _SpiderGameState extends State<SpiderGame> {
       _activeHint = null;
       _activeTableauDrag = null;
       _hasRecordedCurrentWin = false;
+      _dealAnimationNonce = 0;
     });
     _recordStartedDeal(resetStreak: shouldResetStreak);
   }
@@ -234,11 +383,17 @@ class _SpiderGameState extends State<SpiderGame> {
                         value: 2,
                         contentPadding: EdgeInsets.zero,
                         title: Text('2-suit'),
+                        subtitle: Text(
+                          'Balanced difficulty with two suits to manage.',
+                        ),
                       ),
                       RadioListTile<int>(
                         value: 4,
                         contentPadding: EdgeInsets.zero,
                         title: Text('4-suit'),
+                        subtitle: Text(
+                          'Full Spider challenge with all four suits.',
+                        ),
                       ),
                     ],
                   ),
@@ -265,6 +420,83 @@ class _SpiderGameState extends State<SpiderGame> {
       return;
     }
     _dealNewGame(suitMode: result);
+  }
+
+  Future<void> _openHelp() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('How to play Spider'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  HelpSection(
+                    title: 'Goal',
+                    children: [
+                      Text(
+                        'Build complete same-suit runs from King down to Ace. Every completed run is cleared. Clear all eight runs to win.',
+                      ),
+                    ],
+                  ),
+                  HelpSection(
+                    title: 'Same-suit run example',
+                    children: [
+                      HelpDiagram(
+                        'K♠ Q♠ J♠ 10♠ 9♠ 8♠ 7♠ 6♠ 5♠ 4♠ 3♠ 2♠ A♠\n\nMixed suits can stack temporarily, but only a same-suit run moves as one clean block.',
+                      ),
+                    ],
+                  ),
+                  HelpSection(
+                    title: 'Suit modes',
+                    children: [
+                      HelpBulletList(
+                        items: [
+                          '1-suit: easiest mode, all cards are the same suit.',
+                          '2-suit: medium difficulty, two suits appear.',
+                          '4-suit: classic hard mode, all four suits appear.',
+                        ],
+                      ),
+                    ],
+                  ),
+                  HelpSection(
+                    title: 'Moves',
+                    children: [
+                      HelpBulletList(
+                        items: [
+                          'Move face-up cards in descending order.',
+                          'You can place a run on a card that is exactly one rank higher.',
+                          'Empty columns can hold any card or valid run.',
+                          'Only runs in the same suit are fully movable as a stack.',
+                        ],
+                      ),
+                    ],
+                  ),
+                  HelpSection(
+                    title: 'Dealing new cards',
+                    children: [
+                      Text(
+                        'Tap the stock to deal one new card to each tableau column. You must have at least one card in every column before dealing.',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _openStatistics() async {
@@ -362,19 +594,6 @@ class _SpiderGameState extends State<SpiderGame> {
         ],
       ),
     );
-  }
-
-  void _handleMenuAction(_SpiderMenuAction action) {
-    switch (action) {
-      case _SpiderMenuAction.newDeal:
-        _dealNewGame();
-      case _SpiderMenuAction.restartDeal:
-        _restartDeal();
-      case _SpiderMenuAction.statistics:
-        _openStatistics();
-      case _SpiderMenuAction.settings:
-        _openSettings();
-    }
   }
 
   void _showMessage(String message) {
@@ -576,7 +795,7 @@ class _SpiderGameState extends State<SpiderGame> {
     final decoration = _hintDecoration(role);
     return AnimatedContainer(
       key: key,
-      duration: const Duration(milliseconds: 180),
+      duration: kCardHighlightDuration,
       curve: Curves.easeOutCubic,
       padding: padding,
       decoration: decoration == null
@@ -820,7 +1039,7 @@ class _SpiderGameState extends State<SpiderGame> {
   Widget _buildHintBanner() {
     final hint = _activeHint;
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 180),
+      duration: kCardHighlightDuration,
       child: hint == null
           ? const SizedBox.shrink()
           : Container(
@@ -930,135 +1149,253 @@ class _SpiderGameState extends State<SpiderGame> {
     return tallest;
   }
 
+  void _backToMenu() {
+    Navigator.of(context).maybePop();
+  }
+
   Widget _buildWinOverlay(_SpiderLayoutMetrics metrics) {
-    final panelWidth = math.min(metrics.cardWidth * 7.4, 420.0);
-    return Positioned.fill(
-      child: Container(
-        key: const Key('spider_win_overlay'),
-        color: Colors.black.withValues(alpha: 0.28),
-        alignment: Alignment.center,
-        child: Container(
-          width: panelWidth,
-          padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFFF7E39B), Color(0xFFF3C65E), Color(0xFFE0A93B)],
+    return GameWinScreen(
+      key: const Key('spider_win_overlay'),
+      theme: WinScreenTheme.spider,
+      title: 'Spider Solved!',
+      subtitle:
+          'Completed runs stack away cleanly. Spin up another Spider deal anytime.',
+      stats: [
+        WinScreenStat(
+          label: 'Runs',
+          value: '${state.completedRuns.length}/8',
+          icon: Icons.layers_outlined,
+        ),
+        WinScreenStat(
+          label: 'Wins',
+          value: '${_stats.wins}',
+          icon: Icons.emoji_events_outlined,
+        ),
+        WinScreenStat(
+          label: 'Streak',
+          value: '${_stats.currentStreak}',
+          icon: Icons.local_fire_department_outlined,
+        ),
+      ],
+      onNewGame: _dealNewGame,
+      onBackToMenu: _backToMenu,
+      newGameLabel: 'New Deal',
+    );
+  }
+
+  Widget _buildTopShelf(_SpiderLayoutMetrics metrics) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStock(metrics),
+        SizedBox(width: metrics.groupSpacing),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (int i = 0; i < 8; i++) ...[
+                  if (i > 0) SizedBox(width: metrics.foundationSpacing),
+                  _buildCompletedRun(i, metrics),
+                ],
+              ],
             ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x66000000),
-                blurRadius: 28,
-                offset: Offset(0, 18),
-              ),
-            ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.workspace_premium,
-                size: 44,
-                color: Color(0xFF7A4A00),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'You won',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: math.max(28, metrics.cardWidth * 0.62),
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.6,
-                  color: const Color(0xFF4E2D00),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'All eight runs are cleared. Deal another Spider game whenever you are ready.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: math.max(14, metrics.cardWidth * 0.24),
-                  height: 1.35,
-                  color: const Color(0xFF6A4300),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _dealNewGame,
-                  icon: const Icon(Icons.casino_outlined),
-                  label: const Text('New deal'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF14532D),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F3F25),
+          border: Border(
+            top: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 18,
+              offset: Offset(0, -6),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SegmentedButton<int>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment<int>(value: 1, label: Text('1-suit')),
+                    ButtonSegment<int>(value: 2, label: Text('2-suit')),
+                    ButtonSegment<int>(value: 4, label: Text('4-suit')),
+                  ],
+                  selected: {state.suitMode},
+                  onSelectionChanged: (selection) {
+                    if (selection.isEmpty) {
+                      return;
+                    }
+                    final next = selection.first;
+                    if (next == state.suitMode) {
+                      return;
+                    }
+                    _dealNewGame(suitMode: next);
+                  },
+                  style: ButtonStyle(
+                    foregroundColor: WidgetStatePropertyAll(
+                      Colors.white.withValues(alpha: 0.96),
+                    ),
+                    backgroundColor: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return Colors.white.withValues(alpha: 0.18);
+                      }
+                      return Colors.white.withValues(alpha: 0.05);
+                    }),
+                    side: WidgetStatePropertyAll(
+                      BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
+                FilledButton.icon(
+                  onPressed: _dealNewGame,
+                  icon: const Icon(Icons.casino_outlined),
+                  label: const Text('New Game'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _restartDeal,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Restart'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.24),
+                    ),
+                  ),
+                ),
+                Tooltip(
+                  message: 'Hint',
+                  child: IconButton.filledTonal(
+                    onPressed: _showHint,
+                    icon: const Icon(Icons.lightbulb_outline),
+                  ),
+                ),
+                Tooltip(
+                  message: 'Undo',
+                  child: IconButton.filledTonal(
+                    onPressed: _history.isEmpty ? null : _undoMove,
+                    icon: const Icon(Icons.undo),
+                  ),
+                ),
+                Tooltip(
+                  message: 'Redo',
+                  child: IconButton.filledTonal(
+                    onPressed: _redoHistory.isEmpty ? null : _redoMove,
+                    icon: const Icon(Icons.redo),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _openStatistics,
+                  icon: const Icon(Icons.bar_chart_rounded),
+                  label: const Text('Stats'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.24),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  String _suitModeLabel() {
-    return switch (state.suitMode) {
-      1 => '1-suit',
-      2 => '2-suit',
-      4 => '4-suit',
-      _ => '${state.suitMode}-suit',
-    };
+  Widget _buildDealAnimationOverlay(_SpiderLayoutMetrics metrics) {
+    if (_dealAnimationNonce == 0) {
+      return const SizedBox.shrink();
+    }
+
+    final stockLeft = 0.0;
+    final stockTop = 0.0;
+    final targetTop =
+        metrics.cardHeight + metrics.groupSpacing + metrics.sectionSpacing;
+
+    return IgnorePointer(
+      child: TweenAnimationBuilder<double>(
+        key: ValueKey(_dealAnimationNonce),
+        tween: Tween(begin: 0, end: 1),
+        duration: kCardDealDuration,
+        curve: Curves.easeOutCubic,
+        builder: (context, value, child) {
+          return Stack(
+            children: [
+              for (int i = 0; i < 10; i++)
+                Positioned(
+                  left: ui.lerpDouble(
+                    stockLeft + (i % 3) * 2,
+                    i * (metrics.pileWidth + metrics.tableauSpacing),
+                    value,
+                  )!,
+                  top: ui.lerpDouble(stockTop + (i % 3) * 2, targetTop, value)!,
+                  child: Opacity(
+                    opacity: (1 - value * 0.55).clamp(0.0, 1.0),
+                    child: Transform.scale(
+                      scale: ui.lerpDouble(0.94, 1.0, value)!,
+                      child: SizedBox(
+                        width: metrics.cardWidth,
+                        height: metrics.cardHeight,
+                        child: PlayingCardView(
+                          card: PlayingCard(Suit.spades, CardValue.ace),
+                          showBack: true,
+                          elevation: 3,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              metrics.cornerRadius,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('Spider Solitaire'),
         actions: [
           IconButton(
-            tooltip: 'Hint',
-            onPressed: _showHint,
-            icon: const Icon(Icons.lightbulb_outline),
+            tooltip: 'Help',
+            onPressed: _openHelp,
+            icon: const Icon(Icons.help_outline),
           ),
           IconButton(
-            tooltip: 'Undo',
-            onPressed: _history.isEmpty ? null : _undoMove,
-            icon: const Icon(Icons.undo),
-          ),
-          IconButton(
-            tooltip: 'Redo',
-            onPressed: _redoHistory.isEmpty ? null : _redoMove,
-            icon: const Icon(Icons.redo),
-          ),
-          PopupMenuButton<_SpiderMenuAction>(
-            tooltip: 'Game menu',
-            onSelected: _handleMenuAction,
-            itemBuilder: (context) => const [
-              PopupMenuItem<_SpiderMenuAction>(
-                value: _SpiderMenuAction.newDeal,
-                child: Text('New deal'),
-              ),
-              PopupMenuItem<_SpiderMenuAction>(
-                value: _SpiderMenuAction.restartDeal,
-                child: Text('Restart deal'),
-              ),
-              PopupMenuItem<_SpiderMenuAction>(
-                value: _SpiderMenuAction.statistics,
-                child: Text('Statistics'),
-              ),
-              PopupMenuItem<_SpiderMenuAction>(
-                value: _SpiderMenuAction.settings,
-                child: Text('Settings'),
-              ),
-            ],
+            tooltip: 'Settings',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
+      bottomNavigationBar: _buildBottomBar(),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -1075,51 +1412,19 @@ class _SpiderGameState extends State<SpiderGame> {
                 constraints.maxWidth,
               );
               final tableauHeight = _tableauRegionHeight(metrics);
+              final tableauWidth = metrics.tableauWidth;
 
               return Stack(
                 children: [
                   Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildStock(metrics),
-                          SizedBox(width: metrics.groupSpacing),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                children: [
-                                  for (int i = 0; i < 8; i++) ...[
-                                    if (i > 0)
-                                      SizedBox(
-                                        width: metrics.foundationSpacing,
-                                      ),
-                                    _buildCompletedRun(i, metrics),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      _buildTopShelf(metrics),
                       SizedBox(height: metrics.groupSpacing),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          _buildStatusChip(
-                            _suitModeLabel(),
-                            icon: Icons.style_outlined,
-                          ),
-                          _buildStatusChip(
-                            'Deals ${state.dealsRemaining}',
-                            icon: Icons.layers_outlined,
-                          ),
-                          _buildStatusChip(
-                            'Runs ${state.completedRuns.length}/8',
-                            icon: Icons.verified_outlined,
-                          ),
                           _buildStatusChip(
                             'Moves ${_history.length}',
                             icon: Icons.swipe_outlined,
@@ -1131,7 +1436,7 @@ class _SpiderGameState extends State<SpiderGame> {
                         ],
                       ),
                       AnimatedSize(
-                        duration: const Duration(milliseconds: 180),
+                        duration: kCardHighlightDuration,
                         curve: Curves.easeOutCubic,
                         child: _activeHint == null
                             ? const SizedBox.shrink()
@@ -1144,23 +1449,35 @@ class _SpiderGameState extends State<SpiderGame> {
                       Expanded(
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.only(bottom: 16),
-                          child: SizedBox(
-                            height: tableauHeight,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                for (int i = 0; i < 10; i++) ...[
-                                  if (i > 0)
-                                    SizedBox(width: metrics.tableauSpacing),
-                                  _buildTableauPile(i, metrics, tableauHeight),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SizedBox(
+                              width: math.max(
+                                constraints.maxWidth,
+                                tableauWidth + 8,
+                              ),
+                              height: tableauHeight,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  for (int i = 0; i < 10; i++) ...[
+                                    if (i > 0)
+                                      SizedBox(width: metrics.tableauSpacing),
+                                    _buildTableauPile(
+                                      i,
+                                      metrics,
+                                      tableauHeight,
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ],
                   ),
+                  _buildDealAnimationOverlay(metrics),
                   if (state.isWon) _buildWinOverlay(metrics),
                 ],
               );
@@ -1188,8 +1505,6 @@ class _ActiveSpiderDrag {
   @override
   int get hashCode => Object.hash(pileIndex, startIndex);
 }
-
-enum _SpiderMenuAction { newDeal, restartDeal, statistics, settings }
 
 enum _HintRole { none, source, target }
 
@@ -1228,8 +1543,14 @@ class _SpiderLayoutMetrics {
   final double faceDownOverlap;
   final double faceUpOverlap;
 
+  double get pileWidth => cardWidth + 4;
+
+  double get tableauWidth => (pileWidth * 10) + (tableauSpacing * 9);
+
   factory _SpiderLayoutMetrics.fromWidth(double width) {
-    final tableauSpacing = width < 420
+    final tableauSpacing = width < 380
+        ? 2.0
+        : width < 520
         ? 3.0
         : width < 780
         ? 4.0
@@ -1237,7 +1558,7 @@ class _SpiderLayoutMetrics {
     final groupSpacing = width < 420 ? 8.0 : 12.0;
     final foundationSpacing = width < 420 ? 4.0 : 8.0;
     final baseCardWidth = (width - (tableauSpacing * 9)) / 10;
-    final cardWidth = baseCardWidth.clamp(34.0, 78.0);
+    final cardWidth = baseCardWidth.clamp(28.0, 78.0);
     final cardHeight = cardWidth * 1.4;
 
     return _SpiderLayoutMetrics(
@@ -1247,9 +1568,9 @@ class _SpiderLayoutMetrics {
       groupSpacing: groupSpacing,
       foundationSpacing: foundationSpacing,
       tableauSpacing: tableauSpacing,
-      sectionSpacing: width < 420 ? 18.0 : 24.0,
+      sectionSpacing: width < 420 ? 14.0 : 20.0,
       faceDownOverlap: (cardHeight * 0.12).clamp(7.0, 11.0),
-      faceUpOverlap: (cardHeight * 0.24).clamp(18.0, 26.0),
+      faceUpOverlap: (cardHeight * 0.22).clamp(16.0, 24.0),
     );
   }
 }

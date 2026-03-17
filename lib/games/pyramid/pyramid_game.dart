@@ -4,7 +4,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../shared/animation_constants.dart';
 import '../../shared/duration_format.dart';
+import '../../shared/help_widgets.dart';
+import '../../shared/win_screen.dart';
 import 'pyramid_game_state.dart';
 import 'pyramid_stats.dart';
 import 'pyramid_stats_store.dart';
@@ -18,7 +21,7 @@ class PyramidGame extends StatefulWidget {
   State<PyramidGame> createState() => _PyramidGameState();
 }
 
-class _PyramidGameState extends State<PyramidGame> {
+class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
   late PyramidGameState state;
   PyramidGameState? _initialDeal;
   final PyramidStatsStore _statsStore = PyramidStatsStore();
@@ -31,6 +34,7 @@ class _PyramidGameState extends State<PyramidGame> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     state = widget.initialState ?? PyramidGameState.newGame();
     _initialDeal = state.copyWith();
     _hasRecordedResult = state.isWon;
@@ -39,8 +43,18 @@ class _PyramidGameState extends State<PyramidGame> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    if (lifecycleState == AppLifecycleState.inactive ||
+        lifecycleState == AppLifecycleState.paused ||
+        lifecycleState == AppLifecycleState.detached) {
+      _persistState();
+    }
   }
 
   Future<void> _loadState() async {
@@ -241,10 +255,35 @@ class _PyramidGameState extends State<PyramidGame> {
       builder: (context) {
         return AlertDialog(
           title: const Text('How to play'),
-          content: const Text(
-            'Only exposed pyramid cards can be played. Tap one card, then tap another so the pair totals 13. '
-            'Kings clear by themselves. You can also match the top waste card with an exposed pyramid card. '
-            'Tap the stock to cycle through the remaining cards.',
+          content: const SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                HelpSection(
+                  title: 'Valid move examples',
+                  children: [
+                    HelpDiagram(
+                      'Exposed cards only\nQ + A = 13   ✓\n8 + 5 = 13   ✓\nK alone      ✓',
+                    ),
+                  ],
+                ),
+                HelpSection(
+                  title: 'Rules',
+                  children: [
+                    HelpBulletList(
+                      items: [
+                        'Only exposed pyramid cards can be played.',
+                        'Tap one card, then tap another so the pair totals 13.',
+                        'Kings clear by themselves.',
+                        'You can also match the top waste card with an exposed pyramid card.',
+                        'Tap the stock to cycle through the remaining cards.',
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -491,21 +530,50 @@ class _PyramidGameState extends State<PyramidGame> {
     );
   }
 
+  void _backToMenu() {
+    Navigator.of(context).maybePop();
+  }
+
+  Widget _buildWinOverlay() {
+    return GameWinScreen(
+      key: const Key('pyramid_win_overlay'),
+      theme: WinScreenTheme.pyramid,
+      title: 'Pyramid Cleared!',
+      subtitle:
+          'The cards fall away from top to bottom and the sun breaks through.',
+      stats: [
+        WinScreenStat(
+          label: 'Time',
+          value: formatElapsedSeconds(state.elapsedSeconds),
+          icon: Icons.timer_outlined,
+        ),
+        WinScreenStat(
+          label: 'Wins',
+          value: '${_stats.gamesWon}',
+          icon: Icons.emoji_events_outlined,
+        ),
+        WinScreenStat(
+          label: 'Streak',
+          value: '${_stats.currentStreak}',
+          icon: Icons.local_fire_department_outlined,
+        ),
+      ],
+      onNewGame: _startFreshGame,
+      onBackToMenu: _backToMenu,
+    );
+  }
+
   Widget _buildPausedOverlay() {
-    if (!state.paused && !state.isWon) {
+    if (state.isWon) {
+      return _buildWinOverlay();
+    }
+    if (!state.paused) {
       return const SizedBox.shrink();
     }
 
-    final title = state.isWon ? 'You won' : 'Paused';
-    final subtitle = state.isWon
-        ? 'Pyramid cleared in ${formatElapsedSeconds(state.elapsedSeconds)}.'
-        : 'Game saved. Tap resume when you want to keep going.';
-    final buttonLabel = state.isWon ? 'New game' : 'Resume';
-    final onPressed = state.isWon ? _startFreshGame : _togglePause;
-
     return Positioned.fill(
       child: Container(
-        key: Key(state.isWon ? 'pyramid_win_overlay' : 'pyramid_pause_overlay'),
+        key: const Key('pyramid_pause_overlay'),
         color: Colors.black.withValues(alpha: 0.45),
         alignment: Alignment.center,
         child: Card(
@@ -514,11 +582,20 @@ class _PyramidGameState extends State<PyramidGame> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(title, style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  'Paused',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 8),
-                Text(subtitle, textAlign: TextAlign.center),
+                const Text(
+                  'Game saved. Tap resume when you want to keep going.',
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 16),
-                FilledButton(onPressed: onPressed, child: Text(buttonLabel)),
+                FilledButton(
+                  onPressed: _togglePause,
+                  child: const Text('Resume'),
+                ),
               ],
             ),
           ),
@@ -530,7 +607,32 @@ class _PyramidGameState extends State<PyramidGame> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Pyramid Solitaire')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: const Text('Pyramid Solitaire'),
+        actions: [
+          IconButton(
+            tooltip: 'Help',
+            onPressed: _showHowToPlay,
+            icon: const Icon(Icons.help_outline),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Game menu',
+            onSelected: (value) async {
+              switch (value) {
+                case 'new':
+                  await _startFreshGame();
+                case 'stats':
+                  await _showStatistics();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'new', child: Text('New game')),
+              PopupMenuItem(value: 'stats', child: Text('Statistics')),
+            ],
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
@@ -733,7 +835,7 @@ class _PlayableCard extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+        duration: kCardDropDuration,
         width: 82,
         height: 116,
         padding: const EdgeInsets.all(10),

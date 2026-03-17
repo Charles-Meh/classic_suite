@@ -1,6 +1,5 @@
 import 'package:classic_suite/games/sudoku/sudoku_game.dart';
 import 'package:classic_suite/games/sudoku/sudoku_game_state.dart';
-import 'package:classic_suite/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,22 +11,22 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('launcher shows Sudoku and navigates', (
+  testWidgets('screen uses the simplified Sudoku layout', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const ClassicSuiteApp());
-
-    expect(find.text('Sudoku'), findsOneWidget);
-
-    await tester.tap(find.text('Sudoku'));
+    await tester.pumpWidget(const MaterialApp(home: SudokuGame()));
     await tester.pumpAndSettle();
 
-    expect(find.byType(SudokuGame), findsOneWidget);
-    expect(find.text('Starter puzzle'), findsOneWidget);
+    expect(find.text('Sudoku'), findsOneWidget);
     expect(find.byKey(const Key('sudoku_cell_0_0')), findsOneWidget);
     expect(find.byKey(const Key('sudoku_new_puzzle')), findsOneWidget);
-    expect(find.byKey(const Key('sudoku_note_mode')), findsOneWidget);
     expect(find.byKey(const Key('sudoku_hint')), findsOneWidget);
+    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Help'), findsOneWidget);
+    expect(find.text('Starter puzzle'), findsNothing);
+    expect(find.text('All notes'), findsNothing);
+    expect(find.text('Save'), findsNothing);
+    expect(find.text('Load'), findsNothing);
   });
 
   testWidgets('entering a duplicate shows conflict feedback', (
@@ -46,10 +45,11 @@ void main() {
       find.text('That creates a duplicate in the row, column, or box.'),
       findsOneWidget,
     );
-    expect(find.text('Conflicts found'), findsOneWidget);
+    expect(find.text('Board valid'), findsNothing);
+    expect(find.text('Conflicts found'), findsNothing);
   });
 
-  testWidgets('save and load restores entered progress', (
+  testWidgets('autosave restores entered progress on reopen', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: SudokuGame()));
@@ -60,6 +60,7 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('sudoku_digit_4')));
     await tester.tap(find.byKey(const Key('sudoku_digit_4')));
     await tester.pumpAndSettle();
+
     expect(
       find.descendant(
         of: find.byKey(const Key('sudoku_cell_0_2')),
@@ -68,20 +69,12 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.ensureVisible(find.byKey(const Key('sudoku_save_game')));
-    await tester.tap(find.byKey(const Key('sudoku_save_game')));
+    await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byKey(const Key('sudoku_new_puzzle')));
-    await tester.tap(find.byKey(const Key('sudoku_new_puzzle')));
-    await tester.pumpAndSettle();
-    expect(find.text('Starter puzzle'), findsOneWidget);
-
-    await tester.ensureVisible(find.byKey(const Key('sudoku_load_game')));
-    await tester.tap(find.byKey(const Key('sudoku_load_game')));
+    await tester.pumpWidget(const MaterialApp(home: SudokuGame()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Starter puzzle'), findsOneWidget);
     expect(
       find.descendant(
         of: find.byKey(const Key('sudoku_cell_0_2')),
@@ -91,7 +84,7 @@ void main() {
     );
   });
 
-  testWidgets('pencil mode toggles notes and undo restores them', (
+  testWidgets('undo restores previous board state', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: SudokuGame()));
@@ -99,53 +92,70 @@ void main() {
 
     await tester.tap(find.byKey(const Key('sudoku_cell_0_2')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('sudoku_note_mode')));
-    await tester.tap(find.byKey(const Key('sudoku_note_mode')));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('sudoku_digit_1')));
-    await tester.tap(find.byKey(const Key('sudoku_digit_1')));
+    await tester.tap(find.byKey(const Key('sudoku_digit_4')));
     await tester.pumpAndSettle();
 
     expect(
       find.descendant(
         of: find.byKey(const Key('sudoku_cell_0_2')),
-        matching: find.text('1'),
+        matching: find.text('4'),
       ),
       findsOneWidget,
     );
 
-    await tester.ensureVisible(find.byKey(const Key('sudoku_undo')));
     await tester.tap(find.byKey(const Key('sudoku_undo')));
     await tester.pumpAndSettle();
 
     expect(
       find.descendant(
         of: find.byKey(const Key('sudoku_cell_0_2')),
-        matching: find.text('1'),
+        matching: find.text('4'),
       ),
       findsNothing,
     );
   });
 
-  testWidgets('difficulty selection and hint button update the board', (
+  testWidgets('difficulty settings and hint keep board clean', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: SudokuGame()));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Difficulty'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('sudoku_difficulty_hard')));
     await tester.pumpAndSettle();
-    expect(find.text('Crosswind puzzle'), findsOneWidget);
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
 
+    expect(find.text('Hard game started.'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Difficulty'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('sudoku_difficulty_easy')));
     await tester.pumpAndSettle();
-    expect(find.text('Starter puzzle'), findsOneWidget);
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Easy game started.'), findsOneWidget);
 
     await tester.ensureVisible(find.byKey(const Key('sudoku_hint')));
     await tester.tap(find.byKey(const Key('sudoku_hint')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('single'), findsOneWidget);
+    expect(find.text('Hint: this cell can be solved now.'), findsOneWidget);
+    expect(find.byKey(const Key('sudoku_hint_cell_4_4')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('sudoku_hint_cell_4_4')),
+        matching: find.text('5'),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('completed board shows solved message', (

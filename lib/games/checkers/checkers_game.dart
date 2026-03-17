@@ -4,7 +4,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../shared/animation_constants.dart';
 import '../../shared/duration_format.dart';
+import '../../shared/help_widgets.dart';
+import '../../shared/win_screen.dart';
 import 'checkers_ai.dart';
 import 'checkers_game_state.dart';
 import 'checkers_stats.dart';
@@ -19,7 +22,8 @@ class CheckersGame extends StatefulWidget {
   State<CheckersGame> createState() => _CheckersGameState();
 }
 
-class _CheckersGameState extends State<CheckersGame> {
+class _CheckersGameState extends State<CheckersGame>
+    with WidgetsBindingObserver {
   late CheckersGameState state;
   final CheckersAi _ai = const CheckersAi();
   final CheckersStatsStore _statsStore = CheckersStatsStore();
@@ -33,6 +37,7 @@ class _CheckersGameState extends State<CheckersGame> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     state = widget.initialState ?? CheckersGameState.newGame();
     _hasRecordedStart = widget.initialState != null;
     _loadState();
@@ -40,9 +45,19 @@ class _CheckersGameState extends State<CheckersGame> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     _aiTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    if (lifecycleState == AppLifecycleState.inactive ||
+        lifecycleState == AppLifecycleState.paused ||
+        lifecycleState == AppLifecycleState.detached) {
+      _persistState();
+    }
   }
 
   Future<void> _loadState() async {
@@ -122,7 +137,7 @@ class _CheckersGameState extends State<CheckersGame> {
         state.turn != CheckersSide.black) {
       return;
     }
-    _aiTimer = Timer(const Duration(milliseconds: 220), () async {
+    _aiTimer = Timer(kAiMoveDelay, () async {
       final move = _ai.bestMove(state);
       if (move == null || !mounted) return;
       await _applyMove(move, fromAi: true, allowUndoSnapshot: false);
@@ -270,13 +285,34 @@ class _CheckersGameState extends State<CheckersGame> {
       builder: (context) => AlertDialog(
         title: const Text('How to play'),
         content: const SingleChildScrollView(
-          child: Text(
-            '• Red moves first. Regular pieces move one square diagonally forward.\n\n'
-            '• Captures are mandatory. If a jump is available, you must take it. Multi-jumps are generated automatically and played as one move.\n\n'
-            '• Kings can move and capture backward. Reaching the back rank crowns a piece.\n\n'
-            '• Easy/Medium/Hard adjust the AI minimax depth: 2 / 4 / 6 plies.\n\n'
-            '• Undo rolls back one full turn versus the AI, or one move in pass-and-play.\n\n'
-            '• The game auto-saves, so pausing and resuming works naturally if you leave and come back.',
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              HelpSection(
+                title: 'Capture example',
+                children: [
+                  HelpDiagram(
+                    'r = your red piece   b = black piece\n\n. . . .\n. r . .\n. . b .\n. . . x   ← jump over b into x to capture',
+                  ),
+                ],
+              ),
+              HelpSection(
+                title: 'Rules',
+                children: [
+                  HelpBulletList(
+                    items: [
+                      'Red moves first. Regular pieces move one square diagonally forward.',
+                      'Captures are mandatory. If a jump is available, you must take it. Multi-jumps are generated automatically and played as one move.',
+                      'Kings can move and capture backward. Reaching the back rank crowns a piece.',
+                      'Easy/Medium/Hard adjust the AI minimax depth: 2 / 4 / 6 plies.',
+                      'Undo rolls back one full turn versus the AI, or one move in pass-and-play.',
+                      'The game auto-saves, so pausing and resuming works naturally if you leave and come back.',
+                    ],
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         actions: [
@@ -510,10 +546,53 @@ class _CheckersGameState extends State<CheckersGame> {
     );
   }
 
+  bool get _playerWon => state.status == CheckersGameStatus.redWon;
+
+  void _backToMenu() {
+    Navigator.of(context).maybePop();
+  }
+
+  Widget _buildWinOverlay() {
+    return GameWinScreen(
+      theme: WinScreenTheme.checkers,
+      title: 'Kings Rule!',
+      subtitle: 'Your crowned pieces celebrate with a little extra sparkle.',
+      stats: [
+        WinScreenStat(
+          label: 'Time',
+          value: formatElapsedSeconds(state.elapsedSeconds),
+          icon: Icons.timer_outlined,
+        ),
+        WinScreenStat(
+          label: 'Moves',
+          value: '${state.moveHistory.length}',
+          icon: Icons.swap_horiz_rounded,
+        ),
+        WinScreenStat(
+          label: 'Wins',
+          value: '${_stats.wins}',
+          icon: Icons.emoji_events_outlined,
+        ),
+      ],
+      onNewGame: _newGame,
+      onBackToMenu: _backToMenu,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Checkers')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: const Text('Checkers'),
+        actions: [
+          IconButton(
+            tooltip: 'Help',
+            onPressed: _showHelp,
+            icon: const Icon(Icons.help_outline),
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
@@ -529,30 +608,37 @@ class _CheckersGameState extends State<CheckersGame> {
                       _buildHistory(context),
                     ],
                   );
-                  return SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1250),
-                        child: landscape
-                            ? Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(flex: 7, child: board),
-                                  const SizedBox(width: 16),
-                                  Expanded(flex: 5, child: sidePanel),
-                                ],
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  board,
-                                  const SizedBox(height: 16),
-                                  sidePanel,
-                                ],
-                              ),
+                  return Stack(
+                    children: [
+                      SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1250),
+                            child: landscape
+                                ? Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(flex: 7, child: board),
+                                      const SizedBox(width: 16),
+                                      Expanded(flex: 5, child: sidePanel),
+                                    ],
+                                  )
+                                : Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      board,
+                                      const SizedBox(height: 16),
+                                      sidePanel,
+                                    ],
+                                  ),
+                          ),
+                        ),
                       ),
-                    ),
+                      if (_playerWon) _buildWinOverlay(),
+                    ],
                   );
                 },
               ),
@@ -591,72 +677,89 @@ class _CheckersSquare extends StatelessWidget {
     if (isLastMove) background = background.withValues(alpha: 0.82);
     if (isSelected) background = scheme.primaryContainer;
 
-    return Material(
+    return AnimatedContainer(
+      duration: kBoardPieceMoveDuration,
+      curve: Curves.easeOutCubic,
       color: background,
-      child: InkWell(
-        onTap: onTap,
-        child: Stack(
-          children: [
-            if (isLegalTarget)
-              Center(
-                child: Container(
-                  width: piece == null ? 18 : 46,
-                  height: piece == null ? 18 : 46,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: piece == null
-                        ? scheme.primary.withValues(alpha: 0.38)
-                        : scheme.primary.withValues(alpha: 0.20),
-                    border: piece == null
-                        ? null
-                        : Border.all(color: scheme.primary, width: 2),
-                  ),
-                ),
-              ),
-            if (piece != null)
-              Center(
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: piece!.side == CheckersSide.red
-                              ? const [Color(0xFFE15A4F), Color(0xFF9C241C)]
-                              : const [Color(0xFF444A55), Color(0xFF12151C)],
-                        ),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.55),
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.24),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: piece!.isKing
-                          ? Center(
-                              child: Icon(
-                                Icons.workspace_premium,
-                                color: piece!.side == CheckersSide.red
-                                    ? const Color(0xFFFFE39A)
-                                    : const Color(0xFFD6B56B),
-                                size: 28,
-                              ),
-                            )
-                          : null,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Stack(
+            children: [
+              if (isLegalTarget)
+                Center(
+                  child: AnimatedContainer(
+                    duration: piece == null
+                        ? kBoardPieceMoveDuration
+                        : kBoardPieceCaptureDuration,
+                    curve: Curves.easeOutCubic,
+                    width: piece == null ? 18 : 46,
+                    height: piece == null ? 18 : 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: piece == null
+                          ? scheme.primary.withValues(alpha: 0.38)
+                          : scheme.primary.withValues(alpha: 0.20),
+                      border: piece == null
+                          ? null
+                          : Border.all(color: scheme.primary, width: 2),
                     ),
                   ),
                 ),
-              ),
-          ],
+              if (piece != null)
+                Center(
+                  child: AnimatedScale(
+                    duration: kBoardPieceMoveDuration,
+                    curve: Curves.easeOutCubic,
+                    scale: isSelected ? 1.05 : 1,
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: piece!.side == CheckersSide.red
+                                  ? const [Color(0xFFE15A4F), Color(0xFF9C241C)]
+                                  : const [
+                                      Color(0xFF444A55),
+                                      Color(0xFF12151C),
+                                    ],
+                            ),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.55),
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.24),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: piece!.isKing
+                              ? Center(
+                                  child: Icon(
+                                    Icons.workspace_premium,
+                                    color: piece!.side == CheckersSide.red
+                                        ? const Color(0xFFFFE39A)
+                                        : const Color(0xFFD6B56B),
+                                    size: 28,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

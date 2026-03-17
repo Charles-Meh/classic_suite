@@ -141,10 +141,9 @@ void main() {
   });
 
   test('encoding and decoding preserve elapsed time and board state', () {
-    final state = MinesweeperGameState.newGame(MinesweeperConfig.easy())
-        .toggleFlag(1, 1)
-        .withElapsedSeconds(42)
-        .copyWith(message: 'Saved');
+    final state = MinesweeperGameState.newGame(
+      MinesweeperConfig.easy(),
+    ).toggleFlag(1, 1).withElapsedSeconds(42).copyWith(message: 'Saved');
 
     final restored = MinesweeperGameState.tryDecode(state.encode());
 
