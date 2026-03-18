@@ -6,6 +6,7 @@ import 'package:playing_cards/playing_cards.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/animation_constants.dart';
+import '../../shared/classic_game_ui.dart';
 import '../../shared/duration_format.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
@@ -29,7 +30,6 @@ class _FreeCellGameState extends State<FreeCellGame> {
   static const _animationSpeedKey = 'freecell_animation_speed';
 
   late FreeCellGameState state;
-  late FreeCellGameState _initialDealState;
   final List<FreeCellGameState> _history = [];
   final FreeCellStatsStore _statsStore = FreeCellStatsStore();
   Timer? _ticker;
@@ -45,7 +45,6 @@ class _FreeCellGameState extends State<FreeCellGame> {
   void initState() {
     super.initState();
     state = widget.initialState ?? FreeCellGameState();
-    _initialDealState = state.copy();
     _hasRecordedCurrentWin = state.isWon;
     _loadPreferences();
     _loadStats();
@@ -165,27 +164,39 @@ class _FreeCellGameState extends State<FreeCellGame> {
     });
   }
 
-  void _restartDeal() {
-    setState(() {
-      state.restoreFrom(_initialDealState);
-      _history.clear();
-      _activeDrag = null;
-      _hasRecordedCurrentWin = state.isWon;
-      _elapsedSeconds = 0;
-    });
-  }
-
   void _dealNewGame() {
     final shouldResetStreak = !state.isWon && _history.isNotEmpty;
     setState(() {
       state.dealNewGame();
-      _initialDealState = state.copy();
       _history.clear();
       _activeDrag = null;
       _hasRecordedCurrentWin = false;
       _elapsedSeconds = 0;
     });
     _recordStartedDeal(resetStreak: shouldResetStreak);
+  }
+
+  Future<void> _confirmNewGame() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start new deal?'),
+        content: const Text('Current progress will be lost.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('New Deal'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      _dealNewGame();
+    }
   }
 
   Future<void> _autoMoveToFoundation() async {
@@ -415,21 +426,6 @@ class _FreeCellGameState extends State<FreeCellGame> {
     );
   }
 
-  void _handleMenuAction(_FreeCellMenuAction action) {
-    switch (action) {
-      case _FreeCellMenuAction.newGame:
-        _dealNewGame();
-      case _FreeCellMenuAction.restart:
-        _restartDeal();
-      case _FreeCellMenuAction.statistics:
-        _openStatistics();
-      case _FreeCellMenuAction.settings:
-        _openSettings();
-      case _FreeCellMenuAction.help:
-        _openHelp();
-    }
-  }
-
   void _handleTap(List<KlondikeCard> cards) {
     final suggestion = FreeCellAdvisor.bestTapMove(state, cards);
     if (suggestion == null) {
@@ -493,16 +489,11 @@ class _FreeCellGameState extends State<FreeCellGame> {
             ? Border.all(color: Colors.amber.shade300, width: 2)
             : null,
       ),
-      child: SizedBox(
+      child: ClassicPlayingCard(
+        card: card.card,
         width: metrics.cardWidth,
         height: metrics.cardHeight,
-        child: PlayingCardView(
-          card: card.card,
-          elevation: 3,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(metrics.cornerRadius),
-          ),
-        ),
+        cornerRadius: metrics.cornerRadius,
       ),
     );
   }
@@ -841,33 +832,6 @@ class _FreeCellGameState extends State<FreeCellGame> {
     return labels[index];
   }
 
-  Widget _buildStatusBadge(String label, String value, {IconData? icon}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.9)),
-            const SizedBox(width: 6),
-          ],
-          Text(
-            '$label $value',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.94),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _backToMenu() {
     Navigator.of(context).maybePop();
   }
@@ -904,6 +868,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         centerTitle: true,
         title: const Text('FreeCell'),
         actions: [
@@ -913,37 +878,18 @@ class _FreeCellGameState extends State<FreeCellGame> {
             icon: const Icon(Icons.help_outline),
           ),
           IconButton(
-            tooltip: 'Auto move',
-            onPressed: _autoMoveToFoundation,
-            icon: const Icon(Icons.auto_fix_high_rounded),
-          ),
-          PopupMenuButton<_FreeCellMenuAction>(
-            tooltip: 'Game menu',
-            onSelected: _handleMenuAction,
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: _FreeCellMenuAction.newGame,
-                child: Text('New game'),
-              ),
-              PopupMenuItem(
-                value: _FreeCellMenuAction.restart,
-                child: Text('Restart deal'),
-              ),
-              PopupMenuItem(
-                value: _FreeCellMenuAction.statistics,
-                child: Text('Statistics'),
-              ),
-              PopupMenuItem(
-                value: _FreeCellMenuAction.settings,
-                child: Text('Settings'),
-              ),
-              PopupMenuItem(
-                value: _FreeCellMenuAction.help,
-                child: Text('Rules / help'),
-              ),
-            ],
+            tooltip: 'Settings',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings),
           ),
         ],
+      ),
+      bottomNavigationBar: GameBottomBar(
+        onUndo: _history.isEmpty ? null : _undo,
+        onHint: null,
+        hintEnabled: false,
+        onNewDeal: _confirmNewGame,
+        onStatistics: _openStatistics,
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -973,30 +919,27 @@ class _FreeCellGameState extends State<FreeCellGame> {
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Wrap(
-                                spacing: 10,
-                                runSpacing: 10,
-                                children: [
-                                  _buildStatusBadge(
-                                    'Time',
-                                    formatElapsedSeconds(_elapsedSeconds),
+                              GameStatsRow(
+                                items: [
+                                  GameStatItem(
+                                    label: 'Time',
+                                    value: formatElapsedSeconds(_elapsedSeconds),
                                     icon: Icons.timer_outlined,
                                   ),
-                                  _buildStatusBadge(
-                                    'Free cells',
-                                    '${state.emptyFreecellCount}/4',
+                                  GameStatItem(
+                                    label: 'Free cells',
+                                    value: '${state.emptyFreecellCount}/4',
                                     icon: Icons.inbox_outlined,
                                   ),
-                                  _buildStatusBadge(
-                                    'Open columns',
-                                    '${state.emptyCascadeCount}',
+                                  GameStatItem(
+                                    label: 'Open columns',
+                                    value: '${state.emptyCascadeCount}',
                                     icon: Icons.view_week_outlined,
                                   ),
-                                  _buildStatusBadge(
-                                    'Best',
-                                    _stats.bestTimeSeconds == null
+                                  GameStatItem(
+                                    label: 'Best',
+                                    value: _stats.bestTimeSeconds == null
                                         ? '—'
                                         : formatElapsedSeconds(
                                             _stats.bestTimeSeconds!,
@@ -1006,24 +949,19 @@ class _FreeCellGameState extends State<FreeCellGame> {
                                 ],
                               ),
                               const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  OutlinedButton.icon(
-                                    onPressed: _autoMoveToFoundation,
-                                    icon: const Icon(
-                                      Icons.auto_fix_high_rounded,
-                                    ),
-                                    label: const Text('Auto move'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      side: BorderSide(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.35,
-                                        ),
-                                      ),
+                              Align(
+                                alignment: Alignment.center,
+                                child: OutlinedButton.icon(
+                                  onPressed: _autoMoveToFoundation,
+                                  icon: const Icon(Icons.auto_fix_high_rounded),
+                                  label: const Text('Auto move'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: BorderSide(
+                                      color: Colors.white.withValues(alpha: 0.35),
                                     ),
                                   ),
-                                ],
+                                ),
                               ),
                             ],
                           ),
@@ -1076,31 +1014,6 @@ class _FreeCellGameState extends State<FreeCellGame> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: _dealNewGame,
-                              icon: const Icon(Icons.casino_outlined),
-                              label: const Text('New Game'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _history.isEmpty ? null : _undo,
-                              icon: const Icon(Icons.undo_rounded),
-                              label: const Text('Undo'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                side: BorderSide(
-                                  color: Colors.white.withValues(alpha: 0.35),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                   if (state.isWon) _buildWinOverlay(),
@@ -1113,8 +1026,6 @@ class _FreeCellGameState extends State<FreeCellGame> {
     );
   }
 }
-
-enum _FreeCellMenuAction { newGame, restart, statistics, settings, help }
 
 enum _DragZone { cascade, freecell, foundation }
 

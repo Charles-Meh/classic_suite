@@ -6,6 +6,7 @@ import 'package:playing_cards/playing_cards.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/animation_constants.dart';
+import '../../shared/classic_game_ui.dart';
 import '../../shared/duration_format.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
@@ -354,20 +355,6 @@ class _KlondikeGameState extends State<KlondikeGame>
     _persistState();
   }
 
-  Widget _buildAutocompleteButton() {
-    return AnimatedSwitcher(
-      duration: kCardHighlightDuration,
-      child: _canAutocomplete
-          ? FilledButton.icon(
-              key: const Key('autocomplete_button'),
-              onPressed: _runAutocomplete,
-              icon: const Icon(Icons.auto_fix_high),
-              label: const Text('Autocomplete'),
-            )
-          : const SizedBox.shrink(),
-    );
-  }
-
   Future<void> _openSettings() async {
     if (_isAutocompleteRunning) {
       return;
@@ -617,15 +604,6 @@ class _KlondikeGameState extends State<KlondikeGame>
     });
   }
 
-  void _handleMenuAction(_GameMenuAction action) {
-    switch (action) {
-      case _GameMenuAction.newDeal:
-        _dealNewGame();
-      case _GameMenuAction.settings:
-        _openSettings();
-    }
-  }
-
   Future<void> _openHelp() async {
     if (!mounted) {
       return;
@@ -723,13 +701,12 @@ class _KlondikeGameState extends State<KlondikeGame>
       role: role,
       borderRadius: BorderRadius.circular(metrics.cornerRadius + 3),
       padding: const EdgeInsets.all(2),
-      child: SizedBox(
+      child: ClassicPlayingCard(
+        card: card.card,
         width: metrics.cardWidth,
         height: metrics.cardHeight,
-        child: _KlondikeCardView(
-          card: card,
-          cornerRadius: metrics.cornerRadius,
-        ),
+        showBack: !card.faceUp,
+        cornerRadius: metrics.cornerRadius,
       ),
     );
   }
@@ -1437,31 +1414,6 @@ class _KlondikeGameState extends State<KlondikeGame>
     );
   }
 
-  Future<void> _showNewDealConfirmation() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Start new game?'),
-          content: const Text('Current progress will be lost.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('New Game'),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed == true) {
-      _dealNewGame();
-    }
-  }
-
   Future<void> _confirmNewDeal() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1545,7 +1497,10 @@ class _KlondikeGameState extends State<KlondikeGame>
                               spacing: 8,
                               runSpacing: 8,
                               children: [
-                                _buildStatusChip('Moves ${state.moveCount}'),
+                                _buildStatusChip(
+                                  'Moves ${state.moveCount}',
+                                  icon: Icons.swipe_outlined,
+                                ),
                                 _buildStatusChip(
                                   'Score ${state.score}',
                                   icon: Icons.emoji_events_outlined,
@@ -1596,163 +1551,6 @@ class _KlondikeGameState extends State<KlondikeGame>
   }
 }
 
-class _KlondikeCardView extends StatelessWidget {
-  const _KlondikeCardView({required this.card, required this.cornerRadius});
-
-  final KlondikeCard card;
-  final double cornerRadius;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!card.faceUp) {
-      return Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(cornerRadius),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF1B4D9C), Color(0xFF143C7B)],
-          ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.85)),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x33000000),
-              blurRadius: 6,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Center(
-          child: Container(
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(cornerRadius - 2),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
-            ),
-          ),
-        ),
-      );
-    }
-
-    final isRed =
-        card.card.suit == Suit.hearts || card.card.suit == Suit.diamonds;
-    final color = isRed ? const Color(0xFFC62828) : const Color(0xFF1A1A1A);
-    final rank = switch (card.card.value) {
-      CardValue.ace => 'A',
-      CardValue.two => '2',
-      CardValue.three => '3',
-      CardValue.four => '4',
-      CardValue.five => '5',
-      CardValue.six => '6',
-      CardValue.seven => '7',
-      CardValue.eight => '8',
-      CardValue.nine => '9',
-      CardValue.ten => '10',
-      CardValue.jack => 'J',
-      CardValue.queen => 'Q',
-      CardValue.king => 'K',
-      _ => '?',
-    };
-    final suit = switch (card.card.suit) {
-      Suit.clubs => '♣',
-      Suit.diamonds => '♦',
-      Suit.hearts => '♥',
-      Suit.spades => '♠',
-      _ => '?',
-    };
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(cornerRadius),
-        border: Border.all(color: const Color(0xFFD6D6D6)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x22000000),
-            blurRadius: 5,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
-        child: Stack(
-          children: [
-            Align(
-              alignment: Alignment.topLeft,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    rank,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: rank == '10' ? 16 : 18,
-                      fontWeight: FontWeight.w800,
-                      height: 0.95,
-                    ),
-                  ),
-                  Text(
-                    suit,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      height: 0.95,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Center(
-              child: Text(
-                suit,
-                style: TextStyle(
-                  color: color.withValues(alpha: 0.9),
-                  fontSize: 38,
-                  fontWeight: FontWeight.w700,
-                  height: 1,
-                ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.bottomRight,
-              child: RotatedBox(
-                quarterTurns: 2,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      rank,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: rank == '10' ? 16 : 18,
-                        fontWeight: FontWeight.w800,
-                        height: 0.95,
-                      ),
-                    ),
-                    Text(
-                      suit,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        height: 0.95,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _ActiveTableauDrag {
   const _ActiveTableauDrag({required this.pileIndex, required this.startIndex});
 
@@ -1771,8 +1569,6 @@ class _ActiveTableauDrag {
 }
 
 enum _DealMode { random, winning }
-
-enum _GameMenuAction { newDeal, settings }
 
 enum _HintRole { none, source, target }
 

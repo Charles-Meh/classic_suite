@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/animation_constants.dart';
+import '../../shared/classic_game_ui.dart';
 import '../../shared/duration_format.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
@@ -22,8 +23,6 @@ class ChessGame extends StatefulWidget {
   @override
   State<ChessGame> createState() => _ChessGameState();
 }
-
-enum _ChessMenuAction { newGame, settings, stats, help }
 
 class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
   late ChessGameState state;
@@ -222,8 +221,6 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
     await _recordStartedGame();
   }
 
-  Future<void> _togglePause() async => _applyState(state.togglePause());
-
   Future<void> _showHint() async {
     final move = _ai.bestMove(
       state,
@@ -351,6 +348,27 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
     }
   }
 
+  Future<bool> _confirmNewGame() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start new game?'),
+        content: const Text('Your current Chess game will be replaced.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Start')),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _confirmAndStartNewGame() async {
+    if (await _confirmNewGame()) {
+      await _newGame();
+    }
+  }
+
   Future<void> _showStats() async {
     await showDialog<void>(
       context: context,
@@ -443,7 +461,6 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
   }
 
   Widget _buildTopPanel(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -458,26 +475,23 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                _Badge(
+            GameStatsRow(
+              dark: false,
+              items: [
+                GameStatItem(
                   label: 'Turn',
                   value: state.turn.name.toUpperCase(),
-                  color: scheme.primaryContainer,
+                  icon: Icons.swap_vert_rounded,
                 ),
-                _Badge(
-                  label: 'Clock',
+                GameStatItem(
+                  label: 'Time',
                   value: formatElapsedSeconds(state.elapsedSeconds),
-                  color: scheme.secondaryContainer,
+                  icon: Icons.timer_outlined,
                 ),
-                _Badge(
-                  label: 'Status',
-                  value: state.inCheck
-                      ? 'Check'
-                      : (state.isFinished ? 'Finished' : 'In play'),
-                  color: scheme.tertiaryContainer,
+                GameStatItem(
+                  label: 'Moves',
+                  value: '${state.moveHistory.length}',
+                  icon: Icons.swap_horiz_rounded,
                 ),
               ],
             ),
@@ -578,44 +592,6 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildControls(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            FilledButton.icon(
-              key: const Key('chess_undo'),
-              onPressed: _undoStack.isEmpty ? null : _undo,
-              icon: const Icon(Icons.undo),
-              label: const Text('Undo'),
-            ),
-            OutlinedButton.icon(
-              key: const Key('chess_hint'),
-              onPressed: state.isHumanTurn ? _showHint : null,
-              icon: const Icon(Icons.lightbulb_outline),
-              label: const Text('Hint'),
-            ),
-            OutlinedButton.icon(
-              key: const Key('chess_pause'),
-              onPressed: _togglePause,
-              icon: Icon(state.isPaused ? Icons.play_arrow : Icons.pause),
-              label: Text(state.isPaused ? 'Resume' : 'Pause'),
-            ),
-            OutlinedButton.icon(
-              key: const Key('chess_new'),
-              onPressed: _newGame,
-              icon: const Icon(Icons.restart_alt),
-              label: const Text('New game'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildHistory(BuildContext context) {
     return Card(
       child: Padding(
@@ -700,59 +676,43 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: const BackButton(),
         centerTitle: true,
         title: const Text('Chess'),
         actions: [
           IconButton(
             tooltip: 'Help',
             onPressed: _showHelp,
-            icon: const Icon(Icons.help_outline),
+            icon: const Icon(Icons.help_outline_rounded),
           ),
-          PopupMenuButton<_ChessMenuAction>(
-            tooltip: 'Game menu',
-            onSelected: (value) async {
-              switch (value) {
-                case _ChessMenuAction.newGame:
-                  await _newGame();
-                case _ChessMenuAction.settings:
-                  await _showSettings();
-                case _ChessMenuAction.stats:
-                  await _showStats();
-                case _ChessMenuAction.help:
-                  await _showHelp();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: _ChessMenuAction.newGame,
-                child: Text('New game'),
-              ),
-              PopupMenuItem(
-                value: _ChessMenuAction.settings,
-                child: Text('Settings'),
-              ),
-              PopupMenuItem(
-                value: _ChessMenuAction.stats,
-                child: Text('Statistics'),
-              ),
-              PopupMenuItem(
-                value: _ChessMenuAction.help,
-                child: Text('Rules / help'),
-              ),
-            ],
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: _showSettings,
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
+      bottomNavigationBar: _loading
+          ? null
+          : GameBottomBar(
+              onUndo: _undo,
+              undoEnabled: _undoStack.isNotEmpty,
+              onHint: _showHint,
+              hintEnabled: state.isHumanTurn,
+              onNewDeal: _confirmAndStartNewGame,
+              onStatistics: _showStats,
+              newDealLabel: 'New Game',
+            ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
               child: Stack(
                 children: [
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1250),
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1250),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -760,9 +720,7 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
                             const SizedBox(height: 16),
                             _buildBoard(context),
                             const SizedBox(height: 16),
-                            _buildControls(context),
-                            const SizedBox(height: 16),
-                            _buildHistory(context),
+                            Expanded(child: _buildHistory(context)),
                           ],
                         ),
                       ),
@@ -875,33 +833,6 @@ class _ChessSquare extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.value, required this.color});
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.labelSmall),
-          Text(value, style: Theme.of(context).textTheme.titleMedium),
-        ],
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/animation_constants.dart';
+import '../../shared/classic_game_ui.dart';
 import '../../shared/duration_format.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
@@ -230,6 +231,27 @@ class _CheckersGameState extends State<CheckersGame>
 
   Future<void> _togglePause() async => _applyState(state.togglePause());
 
+  Future<bool> _confirmNewGame() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start new game?'),
+        content: const Text('Your current Checkers game will be replaced.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Start')),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _confirmAndStartNewGame() async {
+    if (await _confirmNewGame()) {
+      await _newGame();
+    }
+  }
+
   Future<void> _showStats() async {
     await showDialog<void>(
       context: context,
@@ -326,7 +348,6 @@ class _CheckersGameState extends State<CheckersGame>
   }
 
   Widget _buildTopPanel(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -405,28 +426,23 @@ class _CheckersGameState extends State<CheckersGame>
               ],
             ),
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                _Badge(
+            GameStatsRow(
+              dark: false,
+              items: [
+                GameStatItem(
                   label: 'Turn',
                   value: state.turn == CheckersSide.red ? 'RED' : 'BLACK',
-                  color: scheme.primaryContainer,
+                  icon: Icons.swap_vert_rounded,
                 ),
-                _Badge(
-                  label: 'Clock',
+                GameStatItem(
+                  label: 'Time',
                   value: formatElapsedSeconds(state.elapsedSeconds),
-                  color: scheme.secondaryContainer,
+                  icon: Icons.timer_outlined,
                 ),
-                _Badge(
-                  label: 'Status',
-                  value: state.isFinished
-                      ? 'Finished'
-                      : (state.mandatoryCaptureExists
-                            ? 'Capture required'
-                            : 'In play'),
-                  color: scheme.tertiaryContainer,
+                GameStatItem(
+                  label: 'Moves',
+                  value: '${state.moveHistory.length}',
+                  icon: Icons.swap_horiz_rounded,
                 ),
               ],
             ),
@@ -583,16 +599,32 @@ class _CheckersGameState extends State<CheckersGame>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: const BackButton(),
         centerTitle: true,
         title: const Text('Checkers'),
         actions: [
           IconButton(
             tooltip: 'Help',
             onPressed: _showHelp,
-            icon: const Icon(Icons.help_outline),
+            icon: const Icon(Icons.help_outline_rounded),
+          ),
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: _togglePause,
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
+      bottomNavigationBar: _loading
+          ? null
+          : GameBottomBar(
+              onUndo: _undo,
+              undoEnabled: _undoStack.isNotEmpty,
+              onHint: _showHelp,
+              onNewDeal: _confirmAndStartNewGame,
+              onStatistics: _showStats,
+              newDealLabel: 'New Game',
+            ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
@@ -605,20 +637,19 @@ class _CheckersGameState extends State<CheckersGame>
                     children: [
                       _buildTopPanel(context),
                       const SizedBox(height: 16),
-                      _buildHistory(context),
+                      Expanded(child: _buildHistory(context)),
                     ],
                   );
                   return Stack(
                     children: [
-                      SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1250),
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1250),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
                             child: landscape
                                 ? Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
                                       Expanded(flex: 7, child: board),
                                       const SizedBox(width: 16),
@@ -626,12 +657,11 @@ class _CheckersGameState extends State<CheckersGame>
                                     ],
                                   )
                                 : Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
                                       board,
                                       const SizedBox(height: 16),
-                                      sidePanel,
+                                      Expanded(child: sidePanel),
                                     ],
                                   ),
                           ),
@@ -761,33 +791,6 @@ class _CheckersSquare extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.value, required this.color});
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.labelSmall),
-          Text(value, style: Theme.of(context).textTheme.titleMedium),
-        ],
       ),
     );
   }

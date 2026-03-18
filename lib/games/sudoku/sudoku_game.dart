@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/animation_constants.dart';
+import '../../shared/classic_game_ui.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
 
@@ -234,6 +235,72 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> _showHint() async {
+    await _applyAndPersist(() {
+      state.applyHint();
+    });
+  }
+
+  Future<bool> _confirmNewPuzzle() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start new puzzle?'),
+        content: const Text('Your current Sudoku progress will be replaced.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Start'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _confirmAndStartNewPuzzle() async {
+    if (await _confirmNewPuzzle()) {
+      await _newPuzzle();
+    }
+  }
+
+  Future<void> _showStatistics() async {
+    final filled = state.board
+        .expand((row) => row)
+        .where((value) => value != 0)
+        .length;
+    final givens = state.givens.expand((row) => row).where((value) => value != 0).length;
+    final remaining = 81 - filled;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sudoku statistics'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _StatRow(label: 'Difficulty', value: state.difficulty.label),
+            _StatRow(label: 'Puzzle', value: state.puzzleName),
+            _StatRow(label: 'Starter clues', value: '$givens'),
+            _StatRow(label: 'Filled cells', value: '$filled / 81'),
+            _StatRow(label: 'Remaining', value: '$remaining'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _handleCellTap(int row, int col) {
     setState(() {
       state.selectCell(row, col);
@@ -269,33 +336,38 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final filled = state.board.expand((row) => row).where((value) => value != 0).length;
+    final remaining = 81 - filled;
+
     return Scaffold(
       appBar: AppBar(
+        leading: const BackButton(),
         centerTitle: true,
         title: const Text('Sudoku'),
         actions: [
           IconButton(
             tooltip: 'Help',
             onPressed: _showHelp,
-            icon: const Icon(Icons.help_outline),
+            icon: const Icon(Icons.help_outline_rounded),
           ),
-          PopupMenuButton<String>(
+          IconButton(
             tooltip: 'Settings',
-            onSelected: (value) async {
-              switch (value) {
-                case 'difficulty':
-                  await _openDifficultySettings();
-                case 'new':
-                  await _newPuzzle();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'difficulty', child: Text('Difficulty')),
-              PopupMenuItem(value: 'new', child: Text('New game')),
-            ],
+            onPressed: _openDifficultySettings,
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
+      bottomNavigationBar: _loading
+          ? null
+          : GameBottomBar(
+              onUndo: _handleUndo,
+              undoEnabled: state.canUndo,
+              onHint: _showHint,
+              hintEnabled: !state.completed,
+              onNewDeal: _confirmAndStartNewPuzzle,
+              onStatistics: _showStatistics,
+              newDealLabel: 'New Game',
+            ),
       body: Container(
         width: double.infinity,
         decoration: const BoxDecoration(
@@ -306,20 +378,15 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
           ),
         ),
         child: SafeArea(
-          minimum: const EdgeInsets.all(16),
+          minimum: const EdgeInsets.fromLTRB(16, 16, 16, 12),
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : LayoutBuilder(
                   builder: (context, constraints) {
-                    final boardSize =
-                        (constraints.maxWidth < 500
-                                ? constraints.maxWidth - 8
-                                : minValue(
-                                    constraints.maxWidth - 8,
-                                    constraints.maxHeight - 280,
-                                  ))
-                            .clamp(260.0, 520.0)
-                            .toDouble();
+                    final boardSize = minValue(
+                      constraints.maxWidth - 8,
+                      constraints.maxHeight - 250,
+                    ).clamp(250.0, 520.0).toDouble();
 
                     return Stack(
                       children: [
@@ -331,66 +398,76 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                             }
 
                             final label = event.character;
-                            if (label != null &&
-                                RegExp(r'^[1-9]$').hasMatch(label)) {
+                            if (label != null && RegExp(r'^[1-9]$').hasMatch(label)) {
                               _handleDigitInput(int.parse(label));
                               return KeyEventResult.handled;
                             }
-                            if (event.logicalKey ==
-                                    LogicalKeyboardKey.backspace ||
+                            if (event.logicalKey == LogicalKeyboardKey.backspace ||
                                 event.logicalKey == LogicalKeyboardKey.delete ||
                                 event.logicalKey == LogicalKeyboardKey.digit0 ||
-                                event.logicalKey ==
-                                    LogicalKeyboardKey.numpad0) {
+                                event.logicalKey == LogicalKeyboardKey.numpad0) {
                               _handleClear();
                               return KeyEventResult.handled;
                             }
                             return KeyEventResult.ignored;
                           },
-                          child: SingleChildScrollView(
+                          child: Center(
                             child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                minHeight: constraints.maxHeight,
-                              ),
+                              constraints: const BoxConstraints(maxWidth: 720),
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
+                                  GameStatsRow(
+                                    dark: false,
+                                    items: [
+                                      GameStatItem(
+                                        label: 'Difficulty',
+                                        value: state.difficulty.label,
+                                        icon: Icons.tune_rounded,
+                                      ),
+                                      GameStatItem(
+                                        label: 'Filled',
+                                        value: '$filled/81',
+                                        icon: Icons.edit_note_rounded,
+                                      ),
+                                      GameStatItem(
+                                        label: 'Left',
+                                        value: '$remaining',
+                                        icon: Icons.grid_view_rounded,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
                                   _buildMessageCard(),
                                   const SizedBox(height: 18),
-                                  Center(
-                                    child: SizedBox(
-                                      width: boardSize,
-                                      height: boardSize,
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          border: Border.all(
-                                            color: const Color(0xFF23324A),
-                                            width: 2,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          boxShadow: const [
-                                            BoxShadow(
-                                              color: Color(0x22000000),
-                                              blurRadius: 18,
-                                              offset: Offset(0, 10),
-                                            ),
-                                          ],
+                                  SizedBox(
+                                    width: boardSize,
+                                    height: boardSize,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        border: Border.all(
+                                          color: const Color(0xFF23324A),
+                                          width: 2,
                                         ),
-                                        child: Column(
-                                          children: [
-                                            for (int row = 0; row < 9; row++)
-                                              Expanded(child: _buildRow(row)),
-                                          ],
-                                        ),
+                                        borderRadius: BorderRadius.circular(16),
+                                        boxShadow: const [
+                                          BoxShadow(
+                                            color: Color(0x22000000),
+                                            blurRadius: 18,
+                                            offset: Offset(0, 10),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          for (int row = 0; row < 9; row++)
+                                            Expanded(child: _buildRow(row)),
+                                        ],
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(height: 20),
-                                  _buildBottomActions(),
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 16),
                                   _buildPad(),
                                 ],
                               ),
@@ -432,28 +509,6 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
           fontWeight: state.completed ? FontWeight.w700 : FontWeight.w500,
         ),
       ),
-    );
-  }
-
-  Widget _buildBottomActions() {
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 12,
-      runSpacing: 12,
-      children: [
-        FilledButton.icon(
-          key: const Key('sudoku_new_puzzle'),
-          onPressed: _newPuzzle,
-          icon: const Icon(Icons.refresh),
-          label: const Text('New Game'),
-        ),
-        OutlinedButton.icon(
-          key: const Key('sudoku_undo'),
-          onPressed: state.canUndo ? _handleUndo : null,
-          icon: const Icon(Icons.undo),
-          label: const Text('Undo'),
-        ),
-      ],
     );
   }
 
@@ -574,3 +629,20 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
 }
 
 double minValue(double a, double b) => a < b ? a : b;
+
+class _StatRow extends StatelessWidget {
+  const _StatRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [Expanded(child: Text(label)), Text(value)],
+      ),
+    );
+  }
+}

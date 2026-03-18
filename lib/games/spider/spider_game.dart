@@ -7,6 +7,7 @@ import 'package:playing_cards/playing_cards.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/animation_constants.dart';
+import '../../shared/classic_game_ui.dart';
 import '../../shared/duration_format.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
@@ -29,7 +30,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
   static const Duration _saveInterval = Duration(seconds: 15);
 
   late SpiderGameState state;
-  late SpiderGameState _initialDealState;
   final List<SpiderGameState> _history = [];
   final List<SpiderGameState> _redoHistory = [];
   final SpiderStatsStore _statsStore = SpiderStatsStore();
@@ -47,7 +47,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     state = widget.initialState?.copy() ?? SpiderGameState();
-    _initialDealState = state.copy();
     _hasRecordedCurrentWin = state.isWon;
     _loadGame();
   }
@@ -94,7 +93,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
 
     setState(() {
       _stats = nextStats;
-      _initialDealState = state.copy();
       _hasRecordedCurrentWin = state.isWon;
       _loading = false;
     });
@@ -102,31 +100,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
     if (saved == null) {
       await _persistState();
     }
-  }
-
-  Future<bool?> _showResumeDialog(SpiderGameState saved) {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Resume Game?'),
-          content: Text(
-            'Resume your saved Spider game?\n\nMoves ${saved.moveCount} • Time ${formatElapsedSeconds(saved.elapsedSeconds)}',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('New deal'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Resume'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   void _syncTimers() {
@@ -161,25 +134,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(SpiderGameState.storageKey);
-  }
-
-  Future<void> _loadStats() async {
-    final loaded = await _statsStore.load();
-    if (!mounted) {
-      return;
-    }
-
-    final nextStats = widget.initialState == null
-        ? loaded.recordDealStarted()
-        : loaded;
-    await _statsStore.save(nextStats);
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _stats = nextStats;
-    });
   }
 
   bool _applySuggestion(SpiderSuggestion suggestion) {
@@ -290,31 +244,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
     _persistState();
   }
 
-  void _redoMove() {
-    if (_redoHistory.isEmpty) {
-      return;
-    }
-    setState(() {
-      _history.add(state.copy());
-      final next = _redoHistory.removeLast();
-      state.restoreFrom(next);
-      _activeHint = null;
-      _activeTableauDrag = null;
-      _hasRecordedCurrentWin = state.isWon;
-    });
-  }
-
-  void _restartDeal() {
-    setState(() {
-      state.restoreFrom(_initialDealState);
-      _history.clear();
-      _redoHistory.clear();
-      _activeHint = null;
-      _activeTableauDrag = null;
-      _hasRecordedCurrentWin = state.isWon;
-    });
-  }
-
   void _dealNewGame({int? suitMode}) {
     final shouldResetStreak = !state.isWon && _history.isNotEmpty;
     setState(() {
@@ -322,7 +251,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
         state.suitMode = suitMode;
       }
       state.dealNewGame();
-      _initialDealState = state.copy();
       _history.clear();
       _redoHistory.clear();
       _activeHint = null;
@@ -640,17 +568,12 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
       role: role,
       borderRadius: BorderRadius.circular(metrics.cornerRadius + 3),
       padding: const EdgeInsets.all(2),
-      child: SizedBox(
+      child: ClassicPlayingCard(
+        card: card.card,
         width: metrics.cardWidth,
         height: metrics.cardHeight,
-        child: PlayingCardView(
-          card: card.card,
-          showBack: !card.faceUp,
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(metrics.cornerRadius),
-          ),
-        ),
+        showBack: !card.faceUp,
+        cornerRadius: metrics.cornerRadius,
       ),
     );
   }
@@ -1182,14 +1105,14 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
         _buildStock(metrics),
         SizedBox(width: metrics.groupSpacing),
         Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
+          child: Align(
+            alignment: Alignment.topRight,
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: metrics.foundationSpacing,
+              runSpacing: metrics.foundationSpacing,
               children: [
-                for (int i = 0; i < 8; i++) ...[
-                  if (i > 0) SizedBox(width: metrics.foundationSpacing),
-                  _buildCompletedRun(i, metrics),
-                ],
+                for (int i = 0; i < 8; i++) _buildCompletedRun(i, metrics),
               ],
             ),
           ),
@@ -1287,19 +1210,12 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
                     opacity: (1 - value * 0.55).clamp(0.0, 1.0),
                     child: Transform.scale(
                       scale: ui.lerpDouble(0.94, 1.0, value)!,
-                      child: SizedBox(
+                      child: ClassicPlayingCard(
+                        card: PlayingCard(Suit.spades, CardValue.ace),
                         width: metrics.cardWidth,
                         height: metrics.cardHeight,
-                        child: PlayingCardView(
-                          card: PlayingCard(Suit.spades, CardValue.ace),
-                          showBack: true,
-                          elevation: 3,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              metrics.cornerRadius,
-                            ),
-                          ),
-                        ),
+                        showBack: true,
+                        cornerRadius: metrics.cornerRadius,
                       ),
                     ),
                   ),
@@ -1491,7 +1407,7 @@ class _SpiderLayoutMetrics {
         : 4.0;
     final groupSpacing = width < 420 ? 8.0 : 12.0;
     final foundationSpacing = width < 420 ? 4.0 : 8.0;
-    final horizontalPadding = width < 420 ? 10.0 : 18.0;
+    final horizontalPadding = width < 420 ? 8.0 : 10.0;
     final baseCardWidth =
         (width - horizontalPadding - (tableauSpacing * 9)) / 10;
     final cardWidth = baseCardWidth.clamp(22.0, 64.0);

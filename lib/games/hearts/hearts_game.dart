@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:playing_cards/playing_cards.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/animation_constants.dart';
+import '../../shared/classic_game_ui.dart';
 
 import '../../shared/win_screen.dart';
 import 'hearts_game_state.dart';
@@ -215,6 +217,33 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
     await _recordMatchStarted();
   }
 
+  Future<bool> _confirmNewMatch() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start new match?'),
+        content: const Text('Your current Hearts match will be replaced.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Start'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _confirmAndStartNewMatch() async {
+    if (await _confirmNewMatch()) {
+      await _newMatch();
+    }
+  }
+
   Future<void> _startNextHand() async {
     _history.clear();
     _recordedCurrentHand = false;
@@ -332,9 +361,31 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
               ],
             ),
             const SizedBox(height: 12),
+            GameStatsRow(
+              dark: false,
+              items: [
+                GameStatItem(
+                  label: 'Match',
+                  value: '${state.matchScores[0]}',
+                  icon: Icons.scoreboard_outlined,
+                ),
+                GameStatItem(
+                  label: 'Hand',
+                  value: '${state.handPoints[0]}',
+                  icon: Icons.favorite_outline,
+                ),
+                GameStatItem(
+                  label: 'Tricks',
+                  value: '${state.tricksWon[0]}',
+                  icon: Icons.style_outlined,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 12,
               runSpacing: 12,
+              alignment: WrapAlignment.center,
               children: [
                 for (int player = 0; player < 4; player++)
                   Container(
@@ -357,8 +408,7 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
                         Text('Match: ${state.matchScores[player]}'),
                         Text('Hand: ${state.handPoints[player]}'),
                         Text('Tricks: ${state.tricksWon[player]}'),
-                        if (player != 0)
-                          Text('Cards: ${state.hands[player].length}'),
+                        if (player != 0) Text('Cards: ${state.hands[player].length}'),
                       ],
                     ),
                   ),
@@ -603,47 +653,52 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: const BackButton(),
         centerTitle: true,
         title: const Text('Hearts'),
         actions: [
           IconButton(
             tooltip: 'Help',
             onPressed: _showRules,
-            icon: const Icon(Icons.help_outline),
+            icon: const Icon(Icons.help_outline_rounded),
           ),
-          PopupMenuButton<String>(
-            tooltip: 'Game menu',
-            onSelected: (value) async {
-              switch (value) {
-                case 'new':
-                  await _newMatch();
-                case 'stats':
-                  await _showStats();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'new', child: Text('New match')),
-              PopupMenuItem(value: 'stats', child: Text('Statistics')),
-            ],
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: _togglePause,
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
+      bottomNavigationBar: _loading
+          ? null
+          : GameBottomBar(
+              onUndo: _undo,
+              undoEnabled: _history.isNotEmpty && !state.isPaused,
+              onHint: state.isPassing && state.selectedPassCards.length < 3
+                  ? null
+                  : _showRules,
+              hintEnabled: !state.isPaused,
+              onNewDeal: _confirmAndStartNewMatch,
+              onStatistics: _showStats,
+              newDealLabel: 'New Match',
+            ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
               child: Stack(
                 children: [
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1200),
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1200),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
                         child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             _buildScoreboard(context),
                             const SizedBox(height: 16),
-                            _buildTable(context),
+                            Expanded(child: _buildTable(context)),
                             const SizedBox(height: 16),
                             _buildHumanHand(context),
                           ],
@@ -673,55 +728,43 @@ class _CardFace extends StatelessWidget {
   final bool playable;
   final bool compact;
 
+  PlayingCard _toPlayingCard() {
+    final suit = switch (card.suit) {
+      HeartsSuit.clubs => Suit.clubs,
+      HeartsSuit.diamonds => Suit.diamonds,
+      HeartsSuit.spades => Suit.spades,
+      HeartsSuit.hearts => Suit.hearts,
+    };
+    final value = switch (card.rank) {
+      2 => CardValue.two,
+      3 => CardValue.three,
+      4 => CardValue.four,
+      5 => CardValue.five,
+      6 => CardValue.six,
+      7 => CardValue.seven,
+      8 => CardValue.eight,
+      9 => CardValue.nine,
+      10 => CardValue.ten,
+      11 => CardValue.jack,
+      12 => CardValue.queen,
+      13 => CardValue.king,
+      _ => CardValue.ace,
+    };
+    return PlayingCard(suit, value);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final isRed =
-        card.suit == HeartsSuit.hearts || card.suit == HeartsSuit.diamonds;
-    return AnimatedContainer(
+    return AnimatedScale(
       duration: kCardHighlightDuration,
-      width: compact ? 64 : 72,
-      height: compact ? 86 : 100,
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: selected ? scheme.primaryContainer : scheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: playable ? scheme.primary : scheme.outlineVariant,
-          width: playable ? 2 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            card.rankLabel,
-            style: TextStyle(
-              fontSize: compact ? 18 : 22,
-              fontWeight: FontWeight.w800,
-              color: isRed ? Colors.red.shade700 : scheme.onSurface,
-            ),
-          ),
-          const Spacer(),
-          Align(
-            alignment: Alignment.bottomRight,
-            child: Text(
-              HeartsCard.suitSymbols[card.suit]!,
-              style: TextStyle(
-                fontSize: compact ? 24 : 28,
-                fontWeight: FontWeight.w700,
-                color: isRed ? Colors.red.shade700 : scheme.onSurface,
-              ),
-            ),
-          ),
-        ],
+      scale: selected ? 1.04 : 1,
+      child: ClassicPlayingCard(
+        card: _toPlayingCard(),
+        width: compact ? 64 : 72,
+        height: compact ? 86 : 100,
+        borderColor: Theme.of(context).colorScheme.outlineVariant,
+        highlightColor: selected || playable ? Theme.of(context).colorScheme.primary : null,
+        borderWidth: selected || playable ? 2 : 1.2,
       ),
     );
   }

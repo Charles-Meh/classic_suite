@@ -201,24 +201,6 @@ class KlondikeAdvisor {
       return bestTableauHint;
     }
 
-    for (
-      int foundationIndex = 0;
-      foundationIndex < state.foundations.length;
-      foundationIndex++
-    ) {
-      final pile = state.foundations[foundationIndex];
-      if (pile.isEmpty) {
-        continue;
-      }
-      final move = _bestTableauMoveForLocation(
-        state,
-        KlondikeLocation.foundation(foundationIndex),
-      );
-      if (move != null) {
-        return move;
-      }
-    }
-
     if (state.stock.isNotEmpty) {
       return const KlondikeSuggestion(
         kind: KlondikeSuggestionKind.drawFromStock,

@@ -6,6 +6,7 @@ import 'package:playing_cards/playing_cards.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/animation_constants.dart';
+import '../../shared/classic_game_ui.dart';
 import '../../shared/duration_format.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
@@ -21,8 +22,6 @@ class TriPeaksGame extends StatefulWidget {
   @override
   State<TriPeaksGame> createState() => _TriPeaksGameState();
 }
-
-enum _TriPeaksMenuAction { newGame, restart, stats, help }
 
 class _TriPeaksGameState extends State<TriPeaksGame>
     with WidgetsBindingObserver {
@@ -245,16 +244,6 @@ class _TriPeaksGameState extends State<TriPeaksGame>
     await _applyState(previous);
   }
 
-  Future<void> _redo() async {
-    if (_redoHistory.isEmpty) {
-      return;
-    }
-    final next = _redoHistory.removeLast();
-    _history.add(state.copyWith());
-    _hasRecordedResult = next.isWon || next.isLost;
-    await _applyState(next);
-  }
-
   Future<void> _togglePaused() async {
     await _applyState(state.togglePaused());
   }
@@ -350,7 +339,6 @@ class _TriPeaksGameState extends State<TriPeaksGame>
   }
 
   Widget _buildHeader(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -362,38 +350,32 @@ class _TriPeaksGameState extends State<TriPeaksGame>
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                _MetricChip(
+            GameStatsRow(
+              dark: false,
+              items: [
+                GameStatItem(
                   label: 'Score',
                   value: '${state.score}',
-                  color: scheme.primaryContainer,
                   icon: Icons.stars_rounded,
                 ),
-                _MetricChip(
+                GameStatItem(
                   label: 'Run',
                   value: '${state.currentRun}',
-                  color: scheme.secondaryContainer,
                   icon: Icons.bolt_rounded,
                 ),
-                _MetricChip(
+                GameStatItem(
                   label: 'Best run',
                   value: '${state.longestRun}',
-                  color: scheme.tertiaryContainer,
                   icon: Icons.timeline_rounded,
                 ),
-                _MetricChip(
+                GameStatItem(
                   label: 'Stock',
                   value: '${state.stock.length}',
-                  color: scheme.surfaceContainerHighest,
                   icon: Icons.layers_outlined,
                 ),
-                _MetricChip(
+                GameStatItem(
                   label: 'Time',
                   value: formatElapsedSeconds(state.elapsedSeconds),
-                  color: scheme.surfaceContainerLow,
                   icon: Icons.timer_outlined,
                 ),
               ],
@@ -457,13 +439,12 @@ class _TriPeaksGameState extends State<TriPeaksGame>
             : SizedBox(
                 width: metrics.cardWidth,
                 height: metrics.cardHeight,
-                child: PlayingCardView(
+                child: ClassicPlayingCard(
                   card: card.card,
+                  width: metrics.cardWidth,
+                  height: metrics.cardHeight,
                   showBack: !card.faceUp,
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(metrics.radius),
-                  ),
+                  cornerRadius: metrics.radius,
                 ),
               ),
       ),
@@ -700,54 +681,11 @@ class _TriPeaksGameState extends State<TriPeaksGame>
     );
   }
 
-  Widget _buildControls(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            FilledButton.icon(
-              key: const Key('tripeaks_undo'),
-              onPressed: _history.isEmpty ? null : _undo,
-              icon: const Icon(Icons.undo),
-              label: const Text('Undo'),
-            ),
-            OutlinedButton.icon(
-              key: const Key('tripeaks_redo'),
-              onPressed: _redoHistory.isEmpty ? null : _redo,
-              icon: const Icon(Icons.redo),
-              label: const Text('Redo'),
-            ),
-            OutlinedButton.icon(
-              key: const Key('tripeaks_pause'),
-              onPressed: _togglePaused,
-              icon: Icon(state.paused ? Icons.play_arrow : Icons.pause),
-              label: Text(state.paused ? 'Resume' : 'Pause'),
-            ),
-            OutlinedButton.icon(
-              key: const Key('tripeaks_new'),
-              onPressed: _newGame,
-              icon: const Icon(Icons.casino_outlined),
-              label: const Text('New game'),
-            ),
-            OutlinedButton.icon(
-              key: const Key('tripeaks_restart'),
-              onPressed: _restartDeal,
-              icon: const Icon(Icons.restart_alt),
-              label: const Text('Restart'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         centerTitle: true,
         title: const Text('TriPeaks Solitaire'),
         actions: [
@@ -756,40 +694,19 @@ class _TriPeaksGameState extends State<TriPeaksGame>
             onPressed: _showHowToPlay,
             icon: const Icon(Icons.help_outline),
           ),
-          PopupMenuButton<_TriPeaksMenuAction>(
-            tooltip: 'Game menu',
-            onSelected: (value) async {
-              switch (value) {
-                case _TriPeaksMenuAction.newGame:
-                  await _newGame();
-                case _TriPeaksMenuAction.restart:
-                  await _restartDeal();
-                case _TriPeaksMenuAction.stats:
-                  await _showStatistics();
-                case _TriPeaksMenuAction.help:
-                  await _showHowToPlay();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: _TriPeaksMenuAction.newGame,
-                child: Text('New game'),
-              ),
-              PopupMenuItem(
-                value: _TriPeaksMenuAction.restart,
-                child: Text('Restart deal'),
-              ),
-              PopupMenuItem(
-                value: _TriPeaksMenuAction.stats,
-                child: Text('Statistics'),
-              ),
-              PopupMenuItem(
-                value: _TriPeaksMenuAction.help,
-                child: Text('How to play'),
-              ),
-            ],
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: _showStatistics,
+            icon: const Icon(Icons.settings),
           ),
         ],
+      ),
+      bottomNavigationBar: GameBottomBar(
+        onUndo: _history.isEmpty ? null : _undo,
+        onHint: null,
+        hintEnabled: false,
+        onNewDeal: _newGame,
+        onStatistics: _showStatistics,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -812,8 +729,6 @@ class _TriPeaksGameState extends State<TriPeaksGame>
                                 _buildHeader(context),
                                 const SizedBox(height: 16),
                                 _buildTableau(metrics),
-                                const SizedBox(height: 16),
-                                _buildControls(context),
                               ],
                             ),
                           ),
@@ -826,45 +741,6 @@ class _TriPeaksGameState extends State<TriPeaksGame>
                 },
               ),
             ),
-    );
-  }
-}
-
-class _MetricChip extends StatelessWidget {
-  const _MetricChip({
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.icon,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.labelSmall),
-              Text(value, style: Theme.of(context).textTheme.titleMedium),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

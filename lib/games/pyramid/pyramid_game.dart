@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:playing_cards/playing_cards.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/animation_constants.dart';
+import '../../shared/classic_game_ui.dart';
 import '../../shared/duration_format.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
@@ -209,6 +211,33 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
     await _applyState(nextState, trackUndo: false);
   }
 
+  Future<bool> _confirmNewGame() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start new game?'),
+        content: const Text('Your current pyramid deal will be replaced.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Start'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _confirmAndStartFreshGame() async {
+    if (await _confirmNewGame()) {
+      await _startFreshGame();
+    }
+  }
+
   Future<void> _showStatistics() async {
     await showDialog<void>(
       context: context,
@@ -297,7 +326,6 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -355,35 +383,23 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
               ],
             ),
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                _CounterBadge(
+            GameStatsRow(
+              dark: false,
+              items: [
+                GameStatItem(
                   label: 'Time',
                   value: formatElapsedSeconds(state.elapsedSeconds),
                   icon: Icons.timer_outlined,
-                  color: scheme.primaryContainer,
                 ),
-                _CounterBadge(
+                GameStatItem(
                   label: 'Cleared',
                   value: '${state.removedCount}/28',
                   icon: Icons.layers_clear_outlined,
-                  color: scheme.secondaryContainer,
                 ),
-                _CounterBadge(
+                GameStatItem(
                   label: 'Stock',
                   value: '${state.stock.length}',
                   icon: Icons.style_outlined,
-                  color: scheme.tertiaryContainer,
-                ),
-                _CounterBadge(
-                  label: 'Best',
-                  value: _stats.bestTimeSeconds == null
-                      ? '—'
-                      : formatElapsedSeconds(_stats.bestTimeSeconds!),
-                  icon: Icons.emoji_events_outlined,
-                  color: scheme.surfaceContainerHighest,
                 ),
               ],
             ),
@@ -608,49 +624,52 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: const BackButton(),
         centerTitle: true,
         title: const Text('Pyramid Solitaire'),
         actions: [
           IconButton(
             tooltip: 'Help',
             onPressed: _showHowToPlay,
-            icon: const Icon(Icons.help_outline),
+            icon: const Icon(Icons.help_outline_rounded),
           ),
-          PopupMenuButton<String>(
-            tooltip: 'Game menu',
-            onSelected: (value) async {
-              switch (value) {
-                case 'new':
-                  await _startFreshGame();
-                case 'stats':
-                  await _showStatistics();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'new', child: Text('New game')),
-              PopupMenuItem(value: 'stats', child: Text('Statistics')),
-            ],
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: _restartDeal,
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
+      bottomNavigationBar: _loading
+          ? null
+          : GameBottomBar(
+              onUndo: _undo,
+              undoEnabled: _undoStack.isNotEmpty,
+              onHint: _drawStock,
+              hintEnabled: !state.paused,
+              onNewDeal: _confirmAndStartFreshGame,
+              onStatistics: _showStatistics,
+              newDealLabel: 'New Deal',
+            ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
               child: Stack(
                 children: [
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1100),
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1100),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
                         child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             _buildHeader(context),
                             const SizedBox(height: 16),
                             _buildStockWasteArea(context),
                             const SizedBox(height: 16),
-                            _buildPyramid(context),
+                            Expanded(child: _buildPyramid(context)),
                           ],
                         ),
                       ),
@@ -660,45 +679,6 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
                 ],
               ),
             ),
-    );
-  }
-}
-
-class _CounterBadge extends StatelessWidget {
-  const _CounterBadge({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.labelSmall),
-              Text(value, style: Theme.of(context).textTheme.titleMedium),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }
@@ -731,35 +711,36 @@ class _StockCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: 82,
-      height: 116,
-      decoration: BoxDecoration(
-        color: stockCount > 0 ? scheme.primary : scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
+    return Stack(
       alignment: Alignment.center,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            canRecycle ? Icons.refresh_rounded : Icons.style_rounded,
-            color: stockCount > 0 ? scheme.onPrimary : scheme.onSurfaceVariant,
+      children: [
+        ClassicPlayingCard(
+          card: PlayingCard(Suit.spades, CardValue.ace),
+          width: 82,
+          height: 116,
+          showBack: true,
+        ),
+        Container(
+          width: 82,
+          height: 116,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: Colors.black.withValues(alpha: 0.08),
           ),
-          const SizedBox(height: 8),
-          Text(
-            stockCount > 0 ? '$stockCount' : (canRecycle ? 'Recycle' : 'Empty'),
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: stockCount > 0
-                  ? scheme.onPrimary
-                  : scheme.onSurfaceVariant,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(canRecycle ? Icons.refresh_rounded : Icons.style_rounded),
+              const SizedBox(height: 8),
+              Text(
+                stockCount > 0 ? '$stockCount' : (canRecycle ? 'Recycle' : 'Empty'),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -771,18 +752,7 @@ class _EmptyPileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: 82,
-      height: 116,
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      alignment: Alignment.center,
-      child: Text(label, style: Theme.of(context).textTheme.labelLarge),
-    );
+    return ClassicCardPlaceholder(width: 82, height: 116, label: label, dark: false);
   }
 }
 
@@ -791,16 +761,7 @@ class _ClearedCardPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 82,
-      height: 116,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.12),
-        ),
-      ),
-    );
+    return const ClassicCardPlaceholder(width: 82, height: 116, label: '', dark: false);
   }
 }
 
@@ -820,69 +781,52 @@ class _PlayableCard extends StatelessWidget {
   final bool highlighted;
   final bool enabled;
 
+  PlayingCard _toPlayingCard() {
+    final suit = switch (card.suit) {
+      PyramidSuit.clubs => Suit.clubs,
+      PyramidSuit.diamonds => Suit.diamonds,
+      PyramidSuit.hearts => Suit.hearts,
+      PyramidSuit.spades => Suit.spades,
+    };
+    final value = switch (card.rank) {
+      PyramidRank.ace => CardValue.ace,
+      PyramidRank.two => CardValue.two,
+      PyramidRank.three => CardValue.three,
+      PyramidRank.four => CardValue.four,
+      PyramidRank.five => CardValue.five,
+      PyramidRank.six => CardValue.six,
+      PyramidRank.seven => CardValue.seven,
+      PyramidRank.eight => CardValue.eight,
+      PyramidRank.nine => CardValue.nine,
+      PyramidRank.ten => CardValue.ten,
+      PyramidRank.jack => CardValue.jack,
+      PyramidRank.queen => CardValue.queen,
+      PyramidRank.king => CardValue.king,
+    };
+    return PlayingCard(suit, value);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final foreground = card.isRed ? Colors.red.shade700 : scheme.onSurface;
-    final borderColor = selected
-        ? scheme.primary
-        : highlighted
-        ? scheme.tertiary
-        : scheme.outlineVariant;
-    final background = enabled ? scheme.surface : scheme.surfaceContainerLow;
-
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
+      child: AnimatedScale(
         duration: kCardDropDuration,
-        width: 82,
-        height: 116,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: borderColor,
-            width: selected || highlighted ? 2.2 : 1.2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: enabled ? 0.10 : 0.04),
-              blurRadius: selected ? 14 : 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: DefaultTextStyle(
-          style: TextStyle(
-            color: enabled ? foreground : foreground.withValues(alpha: 0.45),
-            fontWeight: FontWeight.w700,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                card.rankLabel,
-                style: const TextStyle(fontSize: 20, height: 1),
-              ),
-              Text(
-                card.suitSymbol,
-                style: const TextStyle(fontSize: 18, height: 1.1),
-              ),
-              const Spacer(),
-              Align(
-                alignment: Alignment.bottomRight,
-                child: Text(
-                  '${card.value}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: foreground.withValues(alpha: 0.75),
-                  ),
-                ),
-              ),
-            ],
-          ),
+        scale: selected ? 1.03 : 1,
+        child: ClassicPlayingCard(
+          card: _toPlayingCard(),
+          width: 82,
+          height: 116,
+          disabled: !enabled,
+          borderColor: Theme.of(context).colorScheme.outlineVariant,
+          highlightColor: selected
+              ? Theme.of(context).colorScheme.primary
+              : highlighted
+              ? Theme.of(context).colorScheme.tertiary
+              : null,
+          borderWidth: selected || highlighted ? 2.2 : 1.2,
+          valueLabel: '${card.value}',
         ),
       ),
     );
