@@ -1365,16 +1365,21 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
                       _buildTopShelf(metrics),
                       SizedBox(height: metrics.groupSpacing),
                       Wrap(
+                        alignment: WrapAlignment.center,
                         spacing: 8,
                         runSpacing: 8,
                         children: [
                           _buildStatusChip(
-                            'Moves ${_history.length}',
+                            'Moves ${state.moveCount}',
                             icon: Icons.swipe_outlined,
                           ),
                           _buildStatusChip(
-                            'Wins ${_stats.wins} • Streak ${_stats.currentStreak}',
+                            'Score ${state.score}',
                             icon: Icons.emoji_events_outlined,
+                          ),
+                          _buildStatusChip(
+                            formatElapsedSeconds(state.elapsedSeconds),
+                            icon: Icons.timer_outlined,
                           ),
                         ],
                       ),
@@ -1480,16 +1485,16 @@ class _SpiderLayoutMetrics {
 
   factory _SpiderLayoutMetrics.fromWidth(double width) {
     final tableauSpacing = width < 420
-        ? 2.0
+        ? 1.0
         : width < 760
-        ? 3.0
-        : 6.0;
+        ? 2.0
+        : 4.0;
     final groupSpacing = width < 420 ? 8.0 : 12.0;
     final foundationSpacing = width < 420 ? 4.0 : 8.0;
-    final horizontalPadding = width < 420 ? 2.0 : 8.0;
+    final horizontalPadding = width < 420 ? 10.0 : 18.0;
     final baseCardWidth =
         (width - horizontalPadding - (tableauSpacing * 9)) / 10;
-    final cardWidth = baseCardWidth.clamp(24.0, 72.0);
+    final cardWidth = baseCardWidth.clamp(22.0, 64.0);
     final cardHeight = cardWidth * 1.4;
 
     return _SpiderLayoutMetrics(
@@ -1500,8 +1505,8 @@ class _SpiderLayoutMetrics {
       foundationSpacing: foundationSpacing,
       tableauSpacing: tableauSpacing,
       sectionSpacing: width < 420 ? 12.0 : 18.0,
-      faceDownOverlap: (cardHeight * 0.10).clamp(5.0, 9.0),
-      faceUpOverlap: (cardHeight * 0.18).clamp(11.0, 18.0),
+      faceDownOverlap: (cardHeight * 0.10).clamp(5.0, 8.0),
+      faceUpOverlap: (cardHeight * 0.16).clamp(10.0, 16.0),
     );
   }
 }
