@@ -1227,51 +1227,40 @@ class _KlondikeGameState extends State<KlondikeGame>
           ],
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             // Left: Undo and Hint
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Tooltip(
-                  message: 'Undo',
-                  child: IconButton.filledTonal(
-                    onPressed: _history.isEmpty || _isAutocompleteRunning
-                        ? null
-                        : _undoMove,
-                    icon: const Icon(Icons.undo),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Tooltip(
-                  message: 'Hint',
-                  child: IconButton.filledTonal(
-                    onPressed: _isAutocompleteRunning ? null : _showHint,
-                    icon: const Icon(Icons.lightbulb_outline),
-                  ),
-                ),
-              ],
+            Tooltip(
+              message: 'Undo',
+              child: IconButton.filledTonal(
+                onPressed: _history.isEmpty || _isAutocompleteRunning
+                    ? null
+                    : _undoMove,
+                icon: const Icon(Icons.undo),
+              ),
             ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Hint',
+              child: IconButton.filledTonal(
+                onPressed: _isAutocompleteRunning ? null : _showHint,
+                icon: const Icon(Icons.lightbulb_outline),
+              ),
+            ),
+            const Spacer(),
             // Center: New Deal
             FilledButton.icon(
-              onPressed: _showNewDealConfirmation,
+              onPressed: _confirmNewDeal,
               icon: const Icon(Icons.casino_outlined),
               label: const Text('New Deal'),
             ),
-            // Right: Statistics and Autocomplete
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildAutocompleteButton(),
-                if (_canAutocomplete) const SizedBox(width: 8),
-                Tooltip(
-                  message: 'Statistics',
-                  child: IconButton.filledTonal(
-                    onPressed: _openStatistics,
-                    icon: const Icon(Icons.bar_chart_rounded),
-                  ),
-                ),
-              ],
+            const Spacer(),
+            // Right: Statistics
+            Tooltip(
+              message: 'Statistics',
+              child: IconButton.filledTonal(
+                onPressed: _openStatistics,
+                icon: const Icon(Icons.bar_chart_rounded),
+              ),
             ),
           ],
         ),

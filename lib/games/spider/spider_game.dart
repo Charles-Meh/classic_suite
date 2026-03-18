@@ -1216,96 +1216,39 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Row(
           children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                SegmentedButton<int>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment<int>(value: 1, label: Text('1-suit')),
-                    ButtonSegment<int>(value: 2, label: Text('2-suit')),
-                    ButtonSegment<int>(value: 4, label: Text('4-suit')),
-                  ],
-                  selected: {state.suitMode},
-                  onSelectionChanged: (selection) {
-                    if (selection.isEmpty) {
-                      return;
-                    }
-                    final next = selection.first;
-                    if (next == state.suitMode) {
-                      return;
-                    }
-                    _dealNewGame(suitMode: next);
-                  },
-                  style: ButtonStyle(
-                    foregroundColor: WidgetStatePropertyAll(
-                      Colors.white.withValues(alpha: 0.96),
-                    ),
-                    backgroundColor: WidgetStateProperty.resolveWith((states) {
-                      if (states.contains(WidgetState.selected)) {
-                        return Colors.white.withValues(alpha: 0.18);
-                      }
-                      return Colors.white.withValues(alpha: 0.05);
-                    }),
-                    side: WidgetStatePropertyAll(
-                      BorderSide(color: Colors.white.withValues(alpha: 0.14)),
-                    ),
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: _dealNewGame,
-                  icon: const Icon(Icons.casino_outlined),
-                  label: const Text('New Game'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _restartDeal,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Restart'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.24),
-                    ),
-                  ),
-                ),
-                Tooltip(
-                  message: 'Hint',
-                  child: IconButton.filledTonal(
-                    onPressed: _showHint,
-                    icon: const Icon(Icons.lightbulb_outline),
-                  ),
-                ),
-                Tooltip(
-                  message: 'Undo',
-                  child: IconButton.filledTonal(
-                    onPressed: _history.isEmpty ? null : _undoMove,
-                    icon: const Icon(Icons.undo),
-                  ),
-                ),
-                Tooltip(
-                  message: 'Redo',
-                  child: IconButton.filledTonal(
-                    onPressed: _redoHistory.isEmpty ? null : _redoMove,
-                    icon: const Icon(Icons.redo),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _openStatistics,
-                  icon: const Icon(Icons.bar_chart_rounded),
-                  label: const Text('Stats'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.24),
-                    ),
-                  ),
-                ),
-              ],
+            // Left: Undo and Hint
+            Tooltip(
+              message: 'Undo',
+              child: IconButton.filledTonal(
+                onPressed: _history.isEmpty ? null : _undoMove,
+                icon: const Icon(Icons.undo),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: 'Hint',
+              child: IconButton.filledTonal(
+                onPressed: _showHint,
+                icon: const Icon(Icons.lightbulb_outline),
+              ),
+            ),
+            const Spacer(),
+            // Center: New Deal
+            FilledButton.icon(
+              onPressed: _confirmNewDeal,
+              icon: const Icon(Icons.casino_outlined),
+              label: const Text('New Deal'),
+            ),
+            const Spacer(),
+            // Right: Statistics
+            Tooltip(
+              message: 'Statistics',
+              child: IconButton.filledTonal(
+                onPressed: _openStatistics,
+                icon: const Icon(Icons.bar_chart_rounded),
+              ),
             ),
           ],
         ),
