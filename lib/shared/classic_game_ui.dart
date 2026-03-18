@@ -26,8 +26,7 @@ class GameStatsRow extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
-        for (final item in items)
-          _GameStatChip(item: item, dark: dark),
+        for (final item in items) _GameStatChip(item: item, dark: dark),
       ],
     );
   }
@@ -202,7 +201,7 @@ class ClassicPlayingCard extends StatelessWidget {
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF1B4D9C), Color(0xFF143C7B)],
+            colors: [Color(0xFFD63B3B), Color(0xFF9F1F2A)],
           ),
           border: Border.all(
             color: borderColor ?? Colors.white.withValues(alpha: 0.85),
@@ -231,7 +230,7 @@ class ClassicPlayingCard extends StatelessWidget {
     final isRed = card.suit == Suit.hearts || card.suit == Suit.diamonds;
     final color = disabled
         ? (isRed ? const Color(0xFFC62828) : const Color(0xFF1A1A1A))
-            .withValues(alpha: 0.45)
+              .withValues(alpha: 0.45)
         : (isRed ? const Color(0xFFC62828) : const Color(0xFF1A1A1A));
     final rank = switch (card.value) {
       CardValue.ace => 'A',

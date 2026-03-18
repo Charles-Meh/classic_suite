@@ -1234,8 +1234,14 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
         title: const Text('Start new game?'),
         content: const Text('Current progress will be lost.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('New Game')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('New Game'),
+          ),
         ],
       ),
     );
@@ -1251,8 +1257,14 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         title: const Text('Spider Solitaire'),
         actions: [
-          IconButton(icon: const Icon(Icons.help_outline), onPressed: _openHelp),
-          IconButton(icon: const Icon(Icons.settings), onPressed: _openSettings),
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: _openHelp,
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _openSettings,
+          ),
         ],
       ),
       bottomNavigationBar: _buildBottomBar(),
@@ -1422,7 +1434,7 @@ class _SpiderLayoutMetrics {
       tableauSpacing: tableauSpacing,
       sectionSpacing: width < 420 ? 12.0 : 18.0,
       faceDownOverlap: (cardHeight * 0.10).clamp(5.0, 8.0),
-      faceUpOverlap: (cardHeight * 0.16).clamp(10.0, 16.0),
+      faceUpOverlap: (cardHeight * 0.24).clamp(14.0, 24.0),
     );
   }
 }

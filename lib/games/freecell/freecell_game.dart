@@ -37,9 +37,9 @@ class _FreeCellGameState extends State<FreeCellGame> {
   FreeCellStats _stats = const FreeCellStats();
   _FreeCellAnimationSpeed _animationSpeed = _FreeCellAnimationSpeed.normal;
   _ActiveFreeCellDrag? _activeDrag;
+  FreeCellHint? _activeHint;
   bool _soundEnabled = true;
   bool _hasRecordedCurrentWin = false;
-  int _elapsedSeconds = 0;
 
   @override
   void initState() {
@@ -102,7 +102,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
         return;
       }
       setState(() {
-        _elapsedSeconds += 1;
+        state.incrementElapsed();
       });
     });
   }
@@ -120,6 +120,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
         _history.removeLast();
       }
       _activeDrag = null;
+      _activeHint = null;
     });
     if (changed) {
       _maybeRecordWin();
@@ -132,7 +133,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
       return;
     }
     _hasRecordedCurrentWin = true;
-    final nextStats = _stats.recordWin(_elapsedSeconds);
+    final nextStats = _stats.recordWin(state.elapsedSeconds);
     setState(() {
       _stats = nextStats;
     });
@@ -147,7 +148,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
     next = next.recordDealStarted();
     setState(() {
       _stats = next;
-      _elapsedSeconds = 0;
+      state.elapsedSeconds = 0;
     });
     _statsStore.save(next);
   }
@@ -160,6 +161,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
       final previous = _history.removeLast();
       state.restoreFrom(previous);
       _activeDrag = null;
+      _activeHint = null;
       _hasRecordedCurrentWin = state.isWon;
     });
   }
@@ -171,7 +173,8 @@ class _FreeCellGameState extends State<FreeCellGame> {
       _history.clear();
       _activeDrag = null;
       _hasRecordedCurrentWin = false;
-      _elapsedSeconds = 0;
+      _activeHint = null;
+      state.elapsedSeconds = 0;
     });
     _recordStartedDeal(resetStreak: shouldResetStreak);
   }
@@ -197,37 +200,6 @@ class _FreeCellGameState extends State<FreeCellGame> {
     if (confirmed == true) {
       _dealNewGame();
     }
-  }
-
-  Future<void> _autoMoveToFoundation() async {
-    if (state.isWon) {
-      return;
-    }
-
-    _recordHistory();
-    var movedAny = false;
-    while (mounted) {
-      var moved = false;
-      setState(() {
-        moved = state.autoMoveSafeToFoundation();
-        if (moved) {
-          movedAny = true;
-        }
-      });
-      if (!moved) {
-        break;
-      }
-      await Future<void>.delayed(_animationSpeed.delay);
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    if (!movedAny && _history.isNotEmpty) {
-      _history.removeLast();
-    }
-    _maybeRecordWin();
   }
 
   Future<void> _openSettings() async {
@@ -407,7 +379,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
                         'Each free cell holds exactly one card.',
                         'Empty cascades are powerful because they increase the size of runs you can move.',
                         'Tap a card for a smart automatic move, or drag single cards and ordered runs yourself.',
-                        'Auto move sends safe cards home when they cannot hurt your position.',
+                        'Use Hint if you want a suggested move when the board stalls.',
                       ],
                     ),
                   ],
@@ -444,6 +416,97 @@ class _FreeCellGameState extends State<FreeCellGame> {
       }
       return state.moveCardsToCascade(cards, state.cascades[targetIndex]);
     });
+  }
+
+  void _showHint() {
+    setState(() {
+      _activeHint = FreeCellAdvisor.bestHint(state);
+    });
+  }
+
+  bool _isHintSourceCard(int cascadeIndex, int cardIndex) {
+    final hint = _activeHint;
+    if (hint == null || hint.sourceZone != FreeCellHintSourceZone.cascade) {
+      return false;
+    }
+    return hint.sourceIndex == cascadeIndex &&
+        hint.sourceCardIndex != null &&
+        cardIndex >= hint.sourceCardIndex!;
+  }
+
+  bool _isHintTargetFreecell(int index) {
+    final hint = _activeHint;
+    return hint != null &&
+        hint.kind == FreeCellHintKind.moveToFreecell &&
+        hint.targetFreecellIndex == index;
+  }
+
+  bool _isHintTargetFoundation(int index) {
+    final hint = _activeHint;
+    return hint != null &&
+        hint.kind == FreeCellHintKind.moveToFoundation &&
+        hint.targetFoundationIndex == index;
+  }
+
+  bool _isHintTargetCascade(int index) {
+    final hint = _activeHint;
+    return hint != null &&
+        hint.kind == FreeCellHintKind.moveToCascade &&
+        hint.targetCascadeIndex == index;
+  }
+
+  bool _isHintSourceFreecell(int index) {
+    final hint = _activeHint;
+    return hint != null &&
+        hint.sourceZone == FreeCellHintSourceZone.freecell &&
+        hint.sourceIndex == index;
+  }
+
+  bool _isHintSourceFoundation(int index) {
+    final hint = _activeHint;
+    return hint != null &&
+        hint.sourceZone == FreeCellHintSourceZone.foundation &&
+        hint.sourceIndex == index;
+  }
+
+  Widget _buildHintBanner() {
+    final hint = _activeHint;
+    return AnimatedSwitcher(
+      duration: kCardHighlightDuration,
+      child: hint == null
+          ? const SizedBox.shrink()
+          : Container(
+              key: const Key('freecell_hint_banner'),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline_rounded,
+                    size: 20,
+                    color: Colors.white.withValues(alpha: 0.92),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      hint.message,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.96),
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
   }
 
   void _setActiveDrag(_ActiveFreeCellDrag drag) {
@@ -485,6 +548,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
       padding: highlighted ? const EdgeInsets.all(2) : EdgeInsets.zero,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(metrics.cornerRadius + 3),
+        color: highlighted ? const Color(0x22F6C453) : null,
         border: highlighted
             ? Border.all(color: Colors.amber.shade300, width: 2)
             : null,
@@ -502,6 +566,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
     _FreeCellLayoutMetrics metrics, {
     String? label,
     bool active = false,
+    bool highlighted = false,
   }) {
     return AnimatedContainer(
       duration: _animationSpeed.duration,
@@ -509,15 +574,19 @@ class _FreeCellGameState extends State<FreeCellGame> {
       height: metrics.cardHeight,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: active
+        color: highlighted
+            ? const Color(0x3329B6F6)
+            : active
             ? Colors.white.withValues(alpha: 0.18)
             : Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(metrics.cornerRadius),
         border: Border.all(
-          color: active
+          color: highlighted
+              ? const Color(0xFF8DD9FF)
+              : active
               ? Colors.white.withValues(alpha: 0.95)
               : Colors.white.withValues(alpha: 0.42),
-          width: active ? 2 : 1.2,
+          width: active || highlighted ? 2 : 1.2,
         ),
       ),
       child: label == null
@@ -539,11 +608,17 @@ class _FreeCellGameState extends State<FreeCellGame> {
     return DragTarget<_FreeCellDragData>(
       builder: (context, candidate, rejected) {
         final active = candidate.isNotEmpty;
+        final highlighted = _isHintTargetFreecell(index);
         return SizedBox(
           width: metrics.cardWidth,
           height: metrics.cardHeight,
           child: card == null
-              ? _buildPlaceholder(metrics, label: 'FC', active: active)
+              ? _buildPlaceholder(
+                  metrics,
+                  label: 'FC',
+                  active: active,
+                  highlighted: highlighted,
+                )
               : _buildFreecellDraggable(card, index, metrics),
         );
       },
@@ -590,7 +665,11 @@ class _FreeCellGameState extends State<FreeCellGame> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _handleTap([card]),
-        child: _buildCardFace(card, metrics),
+        child: _buildCardFace(
+          card,
+          metrics,
+          highlighted: _isHintSourceFreecell(freecellIndex),
+        ),
       ),
     );
   }
@@ -652,7 +731,13 @@ class _FreeCellGameState extends State<FreeCellGame> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _handleTap([card]),
-        child: _buildCardFace(card, metrics),
+        child: _buildCardFace(
+          card,
+          metrics,
+          highlighted:
+              _isHintSourceFoundation(foundationIndex) ||
+              _isHintTargetFoundation(foundationIndex),
+        ),
       ),
     );
   }
@@ -674,6 +759,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
     return DragTarget<_FreeCellDragData>(
       builder: (context, candidate, rejected) {
         final active = candidate.isNotEmpty;
+        final highlighted = _isHintTargetCascade(cascadeIndex);
         return SizedBox(
           width: metrics.cardWidth,
           height: math.max(regionHeight, pileHeight),
@@ -684,13 +770,22 @@ class _FreeCellGameState extends State<FreeCellGame> {
                 Positioned(
                   left: 0,
                   top: 0,
-                  child: _buildPlaceholder(metrics, label: 'K', active: active),
+                  child: _buildPlaceholder(
+                    metrics,
+                    label: 'K',
+                    active: active,
+                    highlighted: highlighted,
+                  ),
                 ),
-              if (pile.isNotEmpty && active)
+              if (pile.isNotEmpty && (active || highlighted))
                 Positioned(
                   left: 0,
                   top: dropHintTop,
-                  child: _buildPlaceholder(metrics, active: true),
+                  child: _buildPlaceholder(
+                    metrics,
+                    active: true,
+                    highlighted: highlighted,
+                  ),
                 ),
               for (
                 int visibleIndex = 0;
@@ -764,7 +859,11 @@ class _FreeCellGameState extends State<FreeCellGame> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _handleTap(stack),
-        child: _buildCardFace(pile[startIndex], metrics),
+        child: _buildCardFace(
+          pile[startIndex],
+          metrics,
+          highlighted: _isHintSourceCard(cascadeIndex, startIndex),
+        ),
       ),
     );
   }
@@ -845,7 +944,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
       stats: [
         WinScreenStat(
           label: 'Time',
-          value: formatElapsedSeconds(_elapsedSeconds),
+          value: formatElapsedSeconds(state.elapsedSeconds),
           icon: Icons.timer_outlined,
         ),
         WinScreenStat(
@@ -886,8 +985,8 @@ class _FreeCellGameState extends State<FreeCellGame> {
       ),
       bottomNavigationBar: GameBottomBar(
         onUndo: _history.isEmpty ? null : _undo,
-        onHint: null,
-        hintEnabled: false,
+        onHint: _showHint,
+        hintEnabled: true,
         onNewDeal: _confirmNewGame,
         onStatistics: _openStatistics,
       ),
@@ -913,74 +1012,52 @@ class _FreeCellGameState extends State<FreeCellGame> {
                 children: [
                   Column(
                     children: [
-                      Card(
-                        color: Colors.black.withValues(alpha: 0.12),
-                        elevation: 0,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              GameStatsRow(
-                                items: [
-                                  GameStatItem(
-                                    label: 'Time',
-                                    value: formatElapsedSeconds(_elapsedSeconds),
-                                    icon: Icons.timer_outlined,
-                                  ),
-                                  GameStatItem(
-                                    label: 'Free cells',
-                                    value: '${state.emptyFreecellCount}/4',
-                                    icon: Icons.inbox_outlined,
-                                  ),
-                                  GameStatItem(
-                                    label: 'Open columns',
-                                    value: '${state.emptyCascadeCount}',
-                                    icon: Icons.view_week_outlined,
-                                  ),
-                                  GameStatItem(
-                                    label: 'Best',
-                                    value: _stats.bestTimeSeconds == null
-                                        ? '—'
-                                        : formatElapsedSeconds(
-                                            _stats.bestTimeSeconds!,
-                                          ),
-                                    icon: Icons.emoji_events_outlined,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Align(
-                                alignment: Alignment.center,
-                                child: OutlinedButton.icon(
-                                  onPressed: _autoMoveToFoundation,
-                                  icon: const Icon(Icons.auto_fix_high_rounded),
-                                  label: const Text('Auto move'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    side: BorderSide(
-                                      color: Colors.white.withValues(alpha: 0.35),
-                                    ),
-                                  ),
-                                ),
-                              ),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            for (int i = 0; i < 4; i++) ...[
+                              if (i > 0) SizedBox(width: metrics.groupSpacing),
+                              _buildFoundationSlot(i, metrics),
                             ],
-                          ),
+                          ],
                         ),
+                      ),
+                      SizedBox(height: metrics.sectionSpacing * 0.75),
+                      GameStatsRow(
+                        items: [
+                          GameStatItem(
+                            label: 'Time',
+                            value: formatElapsedSeconds(state.elapsedSeconds),
+                            icon: Icons.timer_outlined,
+                          ),
+                          GameStatItem(
+                            label: 'Moves',
+                            value: '${state.moveCount}',
+                            icon: Icons.swipe_outlined,
+                          ),
+                        ],
+                      ),
+                      AnimatedSize(
+                        duration: kCardHighlightDuration,
+                        curve: Curves.easeOutCubic,
+                        child: _activeHint == null
+                            ? const SizedBox.shrink()
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: _buildHintBanner(),
+                              ),
                       ),
                       SizedBox(height: metrics.sectionSpacing),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             for (int i = 0; i < 4; i++) ...[
                               if (i > 0) SizedBox(width: metrics.groupSpacing),
                               _buildFreecellSlot(i, metrics),
-                            ],
-                            SizedBox(width: metrics.groupSpacing * 2),
-                            for (int i = 0; i < 4; i++) ...[
-                              if (i > 0) SizedBox(width: metrics.groupSpacing),
-                              _buildFoundationSlot(i, metrics),
                             ],
                           ],
                         ),
