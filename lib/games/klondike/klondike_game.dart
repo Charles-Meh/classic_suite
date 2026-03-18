@@ -1473,26 +1473,35 @@ class _KlondikeGameState extends State<KlondikeGame>
     }
   }
 
+  Future<void> _confirmNewDeal() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start new game?'),
+        content: const Text('Current progress will be lost.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('New Game')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      _dealNewGame();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        centerTitle: true,
+        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         title: const Text('Klondike Solitaire'),
         actions: [
-          IconButton(
-            key: const Key('klondike_help'),
-            tooltip: 'Help',
-            onPressed: _openHelp,
-            icon: const Icon(Icons.help_outline),
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: _openSettings,
-            icon: const Icon(Icons.settings_outlined),
-          ),
+          IconButton(icon: const Icon(Icons.help_outline), onPressed: _openHelp),
+          IconButton(icon: const Icon(Icons.settings), onPressed: _openSettings),
         ],
       ),
+      bottomNavigationBar: _buildBottomBar(),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Container(
