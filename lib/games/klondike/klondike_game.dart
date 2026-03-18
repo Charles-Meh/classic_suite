@@ -35,7 +35,6 @@ class _KlondikeGameState extends State<KlondikeGame>
   static const Duration _saveInterval = Duration(seconds: 15);
 
   late GameState state;
-  late GameState _initialDealState;
   final List<GameState> _history = [];
   final WinnableSeedCorpus _winnableSeedCorpus = WinnableSeedCorpus();
   final KlondikeStatsStore _statsStore = KlondikeStatsStore();
@@ -59,7 +58,6 @@ class _KlondikeGameState extends State<KlondikeGame>
       final seed = _winnableSeedCorpus.nextSeed(drawCount: state.drawCount);
       state.dealWinnableGame(seed);
     }
-    _initialDealState = state.copy();
     _hasRecordedCurrentWin = state.isWon;
     _loadGame();
   }
@@ -106,7 +104,6 @@ class _KlondikeGameState extends State<KlondikeGame>
 
     setState(() {
       _stats = nextStats;
-      _initialDealState = state.copy();
       _hasRecordedCurrentWin = state.isWon;
       _loading = false;
     });
@@ -114,31 +111,6 @@ class _KlondikeGameState extends State<KlondikeGame>
     if (saved == null) {
       await _persistState();
     }
-  }
-
-  Future<bool?> _showResumeDialog(GameState saved) {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Resume Game?'),
-          content: Text(
-            'Resume your saved Klondike game?\n\nMoves ${saved.moveCount} • Time ${formatElapsedSeconds(saved.elapsedSeconds)}',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('New deal'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Resume'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   void _syncTimers() {
@@ -173,25 +145,6 @@ class _KlondikeGameState extends State<KlondikeGame>
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(GameState.storageKey);
-  }
-
-  Future<void> _loadStats() async {
-    final loaded = await _statsStore.load();
-    if (!mounted) {
-      return;
-    }
-
-    final nextStats = widget.initialState == null
-        ? loaded.recordDealStarted()
-        : loaded;
-    await _statsStore.save(nextStats);
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _stats = nextStats;
-    });
   }
 
   bool _applySuggestion(KlondikeSuggestion suggestion) {
@@ -323,23 +276,6 @@ class _KlondikeGameState extends State<KlondikeGame>
     _persistState();
   }
 
-  void _restartDeal() {
-    if (_isAutocompleteRunning) {
-      return;
-    }
-    setState(() {
-      state.restoreFrom(_initialDealState);
-      _history.clear();
-      _activeHint = null;
-      _activeTableauDrag = null;
-      _isWasteDragging = false;
-      _isAutocompleteRunning = false;
-      _hasRecordedCurrentWin = state.isWon;
-    });
-    _syncTimers();
-    _persistState();
-  }
-
   void _dealNewGame({int? drawCount, _DealMode? dealMode}) {
     if (_isAutocompleteRunning) {
       return;
@@ -359,7 +295,6 @@ class _KlondikeGameState extends State<KlondikeGame>
       } else {
         state.dealNewGame();
       }
-      _initialDealState = state.copy();
       _history.clear();
       _activeHint = null;
       _activeTableauDrag = null;
@@ -686,10 +621,6 @@ class _KlondikeGameState extends State<KlondikeGame>
     switch (action) {
       case _GameMenuAction.newDeal:
         _dealNewGame();
-      case _GameMenuAction.restartDeal:
-        _restartDeal();
-      case _GameMenuAction.statistics:
-        _openStatistics();
       case _GameMenuAction.settings:
         _openSettings();
     }
@@ -1173,73 +1104,66 @@ class _KlondikeGameState extends State<KlondikeGame>
         final hintRole = _tableauHintRole(pileIndex);
         final dragHighlight = candidate.isNotEmpty;
         final showDropHint = dragHighlight || hintRole == _HintRole.target;
-        return _buildHintFrame(
-          role: hintRole == _HintRole.target
-              ? _HintRole.target
-              : _HintRole.none,
-          borderRadius: BorderRadius.circular(metrics.cornerRadius + 6),
-          padding: const EdgeInsets.all(2),
-          child: AnimatedContainer(
-            duration: kCardDropDuration,
-            width: metrics.cardWidth,
-            height: math.max(regionHeight, pileHeight),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(metrics.cornerRadius),
-            ),
-            child: visibleCards.isEmpty
-                ? Align(
-                    alignment: Alignment.topCenter,
-                    child: _buildSlotPlaceholder(
-                      metrics,
-                      key: hintRole == _HintRole.target
-                          ? Key('hint_target_tableau_$pileIndex')
-                          : null,
-                      highlight: dragHighlight,
-                      role: hintRole,
-                    ),
-                  )
-                : Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      if (showDropHint)
-                        Positioned(
-                          left: 0,
-                          top: dropHintTop,
-                          child: _buildSlotPlaceholder(
-                            metrics,
-                            key: Key('tableau_${pileIndex}_drop_hint'),
-                            role: _HintRole.target,
-                          ),
-                        ),
-                      for (
-                        int visibleIndex = 0;
-                        visibleIndex < visibleEntries.length;
-                        visibleIndex++
-                      )
-                        Positioned(
-                          left: 0,
-                          top: _stackOffsetForIndex(
-                            visibleCards,
-                            visibleIndex,
-                            metrics,
-                          ),
-                          width: metrics.cardWidth,
-                          height: metrics.cardHeight,
-                          child: visibleEntries[visibleIndex].card.faceUp
-                              ? _buildDraggableTableauCard(
-                                  pile,
-                                  visibleEntries[visibleIndex].index,
-                                  pileIndex,
-                                  metrics,
-                                )
-                              : _cardWidget(
-                                  visibleEntries[visibleIndex].card,
-                                  metrics,
-                                ),
-                        ),
-                    ],
-                  ),
+        return AnimatedContainer(
+          duration: kCardDropDuration,
+          width: metrics.cardWidth,
+          height: math.max(regionHeight, pileHeight),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(metrics.cornerRadius),
           ),
+          child: visibleCards.isEmpty
+              ? Align(
+                  alignment: Alignment.topCenter,
+                  child: _buildSlotPlaceholder(
+                    metrics,
+                    key: hintRole == _HintRole.target
+                        ? Key('hint_target_tableau_$pileIndex')
+                        : null,
+                    highlight: dragHighlight,
+                    role: hintRole,
+                  ),
+                )
+              : Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    if (showDropHint)
+                      Positioned(
+                        left: 0,
+                        top: dropHintTop,
+                        child: _buildSlotPlaceholder(
+                          metrics,
+                          key: Key('tableau_${pileIndex}_drop_hint'),
+                          role: _HintRole.target,
+                        ),
+                      ),
+                    for (
+                      int visibleIndex = 0;
+                      visibleIndex < visibleEntries.length;
+                      visibleIndex++
+                    )
+                      Positioned(
+                        left: 0,
+                        top: _stackOffsetForIndex(
+                          visibleCards,
+                          visibleIndex,
+                          metrics,
+                        ),
+                        width: metrics.cardWidth,
+                        height: metrics.cardHeight,
+                        child: visibleEntries[visibleIndex].card.faceUp
+                            ? _buildDraggableTableauCard(
+                                pile,
+                                visibleEntries[visibleIndex].index,
+                                pileIndex,
+                                metrics,
+                              )
+                            : _cardWidget(
+                                visibleEntries[visibleIndex].card,
+                                metrics,
+                              ),
+                      ),
+                  ],
+                ),
         );
       },
       onWillAcceptWithDetails: (details) {
@@ -1284,65 +1208,73 @@ class _KlondikeGameState extends State<KlondikeGame>
     );
   }
 
-  Widget _buildBottomControls() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 10,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        alignment: WrapAlignment.spaceBetween,
-        children: [
-          SegmentedButton<int>(
-            segments: const [
-              ButtonSegment<int>(value: 1, label: Text('Draw 1')),
-              ButtonSegment<int>(value: 3, label: Text('Draw 3')),
-            ],
-            selected: {state.drawCount},
-            onSelectionChanged: _isAutocompleteRunning
-                ? null
-                : (selection) {
-                    final value = selection.first;
-                    if (value == state.drawCount) {
-                      return;
-                    }
-                    _dealNewGame(drawCount: value);
-                  },
+  Widget _buildBottomBar() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F3F25),
+          border: Border(
+            top: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
           ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Winning deal',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.95),
-                  fontWeight: FontWeight.w600,
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 18,
+              offset: Offset(0, -6),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Left: Undo and Hint
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Tooltip(
+                  message: 'Undo',
+                  child: IconButton.filledTonal(
+                    onPressed: _history.isEmpty || _isAutocompleteRunning
+                        ? null
+                        : _undoMove,
+                    icon: const Icon(Icons.undo),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Switch.adaptive(
-                value: _dealMode == _DealMode.winning,
-                onChanged: _isAutocompleteRunning
-                    ? null
-                    : (value) {
-                        final nextMode = value
-                            ? _DealMode.winning
-                            : _DealMode.random;
-                        if (nextMode == _dealMode) {
-                          return;
-                        }
-                        _dealNewGame(dealMode: nextMode);
-                      },
-              ),
-            ],
-          ),
-          _buildAutocompleteButton(),
-        ],
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: 'Hint',
+                  child: IconButton.filledTonal(
+                    onPressed: _isAutocompleteRunning ? null : _showHint,
+                    icon: const Icon(Icons.lightbulb_outline),
+                  ),
+                ),
+              ],
+            ),
+            // Center: New Deal
+            FilledButton.icon(
+              onPressed: _showNewDealConfirmation,
+              icon: const Icon(Icons.casino_outlined),
+              label: const Text('New Deal'),
+            ),
+            // Right: Statistics and Autocomplete
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildAutocompleteButton(),
+                if (_canAutocomplete) const SizedBox(width: 8),
+                Tooltip(
+                  message: 'Statistics',
+                  child: IconButton.filledTonal(
+                    onPressed: _openStatistics,
+                    icon: const Icon(Icons.bar_chart_rounded),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1374,62 +1306,12 @@ class _KlondikeGameState extends State<KlondikeGame>
     );
   }
 
-  Widget _buildHintBanner() {
-    final hint = _activeHint;
-    return AnimatedSwitcher(
-      duration: kCardHighlightDuration,
-      child: hint == null
-          ? const SizedBox.shrink()
-          : Container(
-              key: const Key('hint_banner'),
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    _hintIcon(hint.kind),
-                    size: 20,
-                    color: Colors.white.withValues(alpha: 0.92),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      hint.message,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.96),
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-    );
-  }
-
-  IconData _hintIcon(KlondikeSuggestionKind kind) {
-    return switch (kind) {
-      KlondikeSuggestionKind.moveToFoundation => Icons.north_east_rounded,
-      KlondikeSuggestionKind.moveToTableau => Icons.compare_arrows_rounded,
-      KlondikeSuggestionKind.drawFromStock => Icons.layers_outlined,
-      KlondikeSuggestionKind.recycleWaste => Icons.replay_rounded,
-      KlondikeSuggestionKind.noMoves => Icons.info_outline_rounded,
-    };
-  }
-
   _HintRole _hintRoleForCard(KlondikeCard card) {
     final hint = _activeHint;
     if (hint == null) {
       return _HintRole.none;
     }
-    return hint.cards.any((hintCard) => identical(hintCard, card))
+    return hint.cards.isNotEmpty && identical(hint.cards.first, card)
         ? _HintRole.source
         : _HintRole.none;
   }
@@ -1566,6 +1448,31 @@ class _KlondikeGameState extends State<KlondikeGame>
     );
   }
 
+  Future<void> _showNewDealConfirmation() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Start new game?'),
+          content: const Text('Current progress will be lost.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('New Game'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true) {
+      _dealNewGame();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1580,38 +1487,9 @@ class _KlondikeGameState extends State<KlondikeGame>
             icon: const Icon(Icons.help_outline),
           ),
           IconButton(
-            tooltip: 'Hint',
-            onPressed: _isAutocompleteRunning ? null : _showHint,
-            icon: const Icon(Icons.lightbulb_outline),
-          ),
-          IconButton(
-            tooltip: 'Undo',
-            onPressed: _history.isEmpty || _isAutocompleteRunning
-                ? null
-                : _undoMove,
-            icon: const Icon(Icons.undo),
-          ),
-          PopupMenuButton<_GameMenuAction>(
-            tooltip: 'Game menu',
-            onSelected: _handleMenuAction,
-            itemBuilder: (context) => const [
-              PopupMenuItem<_GameMenuAction>(
-                value: _GameMenuAction.newDeal,
-                child: Text('New deal'),
-              ),
-              PopupMenuItem<_GameMenuAction>(
-                value: _GameMenuAction.restartDeal,
-                child: Text('Restart deal'),
-              ),
-              PopupMenuItem<_GameMenuAction>(
-                value: _GameMenuAction.statistics,
-                child: Text('Statistics'),
-              ),
-              PopupMenuItem<_GameMenuAction>(
-                value: _GameMenuAction.settings,
-                child: Text('Settings'),
-              ),
-            ],
+            tooltip: 'Settings',
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
@@ -1680,16 +1558,6 @@ class _KlondikeGameState extends State<KlondikeGame>
                                 ),
                               ],
                             ),
-                            AnimatedSize(
-                              duration: kCardHighlightDuration,
-                              curve: Curves.easeOutCubic,
-                              child: _activeHint == null
-                                  ? const SizedBox.shrink()
-                                  : Padding(
-                                      padding: const EdgeInsets.only(top: 12),
-                                      child: _buildHintBanner(),
-                                    ),
-                            ),
                             SizedBox(height: metrics.sectionSpacing),
                             Expanded(
                               child: SingleChildScrollView(
@@ -1716,7 +1584,7 @@ class _KlondikeGameState extends State<KlondikeGame>
                                 ),
                               ),
                             ),
-                            _buildBottomControls(),
+                            const SizedBox.shrink(),
                           ],
                         ),
                         if (state.isWon) _buildWinOverlay(metrics),
@@ -1906,7 +1774,7 @@ class _ActiveTableauDrag {
 
 enum _DealMode { random, winning }
 
-enum _GameMenuAction { newDeal, restartDeal, statistics, settings }
+enum _GameMenuAction { newDeal, settings }
 
 enum _HintRole { none, source, target }
 

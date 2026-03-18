@@ -73,14 +73,12 @@ class KlondikeLocation {
 class KlondikeSuggestion {
   const KlondikeSuggestion({
     required this.kind,
-    required this.message,
     this.cards = const [],
     this.targetTableauIndex,
     this.source,
   });
 
   final KlondikeSuggestionKind kind;
-  final String message;
   final List<KlondikeCard> cards;
   final int? targetTableauIndex;
   final KlondikeLocation? source;
@@ -107,7 +105,6 @@ class KlondikeAdvisor {
         kind: KlondikeSuggestionKind.moveToFoundation,
         cards: [card],
         source: location,
-        message: 'Move ${_cardLabel(card)} to its foundation.',
       );
     }
 
@@ -120,7 +117,6 @@ class KlondikeAdvisor {
         kind: KlondikeSuggestionKind.moveToFoundation,
         cards: [card],
         source: location,
-        message: 'Move ${_cardLabel(card)} to its foundation.',
       );
     }
 
@@ -129,10 +125,7 @@ class KlondikeAdvisor {
 
   static KlondikeSuggestion bestHint(GameState state) {
     if (state.isWon) {
-      return const KlondikeSuggestion(
-        kind: KlondikeSuggestionKind.noMoves,
-        message: 'You already won this deal.',
-      );
+      return const KlondikeSuggestion(kind: KlondikeSuggestionKind.noMoves);
     }
 
     if (state.waste.isNotEmpty) {
@@ -143,7 +136,6 @@ class KlondikeAdvisor {
           kind: KlondikeSuggestionKind.moveToFoundation,
           cards: [wasteCard],
           source: const KlondikeLocation.waste(),
-          message: 'Move ${_cardLabel(wasteCard)} from waste to foundation.',
         );
       }
 
@@ -172,8 +164,6 @@ class KlondikeAdvisor {
             pileIndex: pileIndex,
             cardIndex: pile.length - 1,
           ),
-          message:
-              'Move ${_cardLabel(topCard)} from tableau ${pileIndex + 1} to foundation.',
         );
       }
     }
@@ -233,7 +223,6 @@ class KlondikeAdvisor {
       return const KlondikeSuggestion(
         kind: KlondikeSuggestionKind.drawFromStock,
         source: KlondikeLocation.stock(),
-        message: 'Draw from the stock for more options.',
       );
     }
 
@@ -241,14 +230,10 @@ class KlondikeAdvisor {
       return const KlondikeSuggestion(
         kind: KlondikeSuggestionKind.recycleWaste,
         source: KlondikeLocation.waste(),
-        message: 'Recycle the waste back into the stock.',
       );
     }
 
-    return const KlondikeSuggestion(
-      kind: KlondikeSuggestionKind.noMoves,
-      message: 'No moves are available from this position.',
-    );
+    return const KlondikeSuggestion(kind: KlondikeSuggestionKind.noMoves);
   }
 
   static KlondikeSuggestion? _bestTableauMoveForLocation(
@@ -277,7 +262,13 @@ class KlondikeAdvisor {
         continue;
       }
       final targetPile = state.tableau[targetIndex];
-      if (!state.canMoveCardsToTableau(cards, targetPile)) {
+      if (!state.canMoveCardsToTableau(cards, targetPile) ||
+          _isRedundantTableauMove(
+            state,
+            source: location,
+            targetPileIndex: targetIndex,
+            cards: cards,
+          )) {
         continue;
       }
       final score = _tableauHintScore(
@@ -296,23 +287,44 @@ class KlondikeAdvisor {
       return null;
     }
 
-    final cardsLabel = cards.length == 1
-        ? _cardLabel(cards.first)
-        : '${_cardLabel(cards.first)} stack';
-    final sourceLabel = switch (location.zone) {
-      KlondikeLocationZone.stock => 'stock',
-      KlondikeLocationZone.waste => 'waste',
-      KlondikeLocationZone.foundation => 'foundation',
-      KlondikeLocationZone.tableau => 'tableau ${location.pileIndex! + 1}',
-    };
     return KlondikeSuggestion(
       kind: KlondikeSuggestionKind.moveToTableau,
       cards: cards,
       targetTableauIndex: bestTargetIndex,
       source: location,
-      message:
-          'Move $cardsLabel from $sourceLabel to tableau ${bestTargetIndex + 1}.',
     );
+  }
+
+  static bool _isRedundantTableauMove(
+    GameState state, {
+    required KlondikeLocation source,
+    required int targetPileIndex,
+    required List<KlondikeCard> cards,
+  }) {
+    if (source.zone != KlondikeLocationZone.tableau || source.cardIndex == 0) {
+      return false;
+    }
+
+    final sourcePile = state.tableau[source.pileIndex!];
+    final previousCard = sourcePile[source.cardIndex! - 1];
+    if (!previousCard.faceUp) {
+      return false;
+    }
+
+    final movingCard = cards.first;
+    final hasOppositeColor =
+        _isRed(previousCard.card.suit) != _isRed(movingCard.card.suit);
+    final isOneRankLower = movingCard.valueIndex == previousCard.valueIndex - 1;
+    if (!hasOppositeColor || !isOneRankLower) {
+      return false;
+    }
+
+    final targetPile = state.tableau[targetPileIndex];
+    return targetPile.isNotEmpty;
+  }
+
+  static bool _isRed(Suit suit) {
+    return suit == Suit.hearts || suit == Suit.diamonds;
   }
 
   static int _tableauHintScore(

@@ -16,11 +16,13 @@ class GameListPage extends StatefulWidget {
 
 class _GameListPageState extends State<GameListPage> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   String _query = '';
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -64,49 +66,35 @@ class _GameListPageState extends State<GameListPage> {
                             color: Colors.white.withValues(alpha: 0.28),
                           ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Choose a game',
-                              style: Theme.of(context).textTheme.headlineSmall
-                                  ?.copyWith(fontWeight: FontWeight.w800),
+                        child: TextField(
+                          key: const Key('game_search_field'),
+                          controller: _searchController,
+                          focusNode: _searchFocusNode,
+                          autofocus: false,
+                          onChanged: (value) => setState(() => _query = value),
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            hintText: 'Search games',
+                            filled: true,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest
+                                .withValues(alpha: 0.7),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              borderSide: BorderSide.none,
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Search once, tap once, and jump straight back into your last in-progress game.',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                            const SizedBox(height: 14),
-                            TextField(
-                              controller: _searchController,
-                              onChanged: (value) =>
-                                  setState(() => _query = value),
-                              decoration: InputDecoration(
-                                prefixIcon: const Icon(Icons.search_rounded),
-                                hintText: 'Search games',
-                                filled: true,
-                                fillColor: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceContainerHighest
-                                    .withValues(alpha: 0.7),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                  borderSide: BorderSide.none,
-                                ),
-                                suffixIcon: _query.isEmpty
-                                    ? null
-                                    : IconButton(
-                                        tooltip: 'Clear search',
-                                        onPressed: () {
-                                          _searchController.clear();
-                                          setState(() => _query = '');
-                                        },
-                                        icon: const Icon(Icons.close_rounded),
-                                      ),
-                              ),
-                            ),
-                          ],
+                            suffixIcon: _query.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Clear search',
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _query = '');
+                                    },
+                                    icon: const Icon(Icons.close_rounded),
+                                  ),
+                          ),
                         ),
                       ),
                     ),
@@ -122,13 +110,15 @@ class _GameListPageState extends State<GameListPage> {
                           )
                         : ListView.separated(
                             itemCount: filteredGames.length,
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (context, index) =>
                                 const SizedBox(height: 12),
                             itemBuilder: (context, index) {
                               final game = filteredGames[index];
                               return _GameTile(
                                 game: game,
                                 onTap: () {
+                                  _searchFocusNode.unfocus();
+                                  FocusManager.instance.primaryFocus?.unfocus();
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(builder: game.builder),
