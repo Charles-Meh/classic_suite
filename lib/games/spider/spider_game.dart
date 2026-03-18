@@ -81,15 +81,7 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
     }
 
     if (saved != null) {
-      final shouldResume = await _showResumeDialog(saved) ?? false;
-      if (!mounted) {
-        return;
-      }
-      if (shouldResume) {
-        state = saved;
-      } else {
-        await prefs.remove(SpiderGameState.storageKey);
-      }
+      state = saved;
     }
 
     final nextStats = widget.initialState == null && saved == null
@@ -1412,7 +1404,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
                 constraints.maxWidth,
               );
               final tableauHeight = _tableauRegionHeight(metrics);
-              final tableauWidth = metrics.tableauWidth;
 
               return Stack(
                 children: [
@@ -1449,28 +1440,18 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
                       Expanded(
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.only(bottom: 16),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: SizedBox(
-                              width: math.max(
-                                constraints.maxWidth,
-                                tableauWidth + 8,
-                              ),
-                              height: tableauHeight,
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  for (int i = 0; i < 10; i++) ...[
-                                    if (i > 0)
-                                      SizedBox(width: metrics.tableauSpacing),
-                                    _buildTableauPile(
-                                      i,
-                                      metrics,
-                                      tableauHeight,
-                                    ),
-                                  ],
+                          child: SizedBox(
+                            width: constraints.maxWidth,
+                            height: tableauHeight,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (int i = 0; i < 10; i++) ...[
+                                  if (i > 0)
+                                    SizedBox(width: metrics.tableauSpacing),
+                                  _buildTableauPile(i, metrics, tableauHeight),
                                 ],
-                              ),
+                              ],
                             ),
                           ),
                         ),
@@ -1545,32 +1526,30 @@ class _SpiderLayoutMetrics {
 
   double get pileWidth => cardWidth + 4;
 
-  double get tableauWidth => (pileWidth * 10) + (tableauSpacing * 9);
-
   factory _SpiderLayoutMetrics.fromWidth(double width) {
-    final tableauSpacing = width < 380
+    final tableauSpacing = width < 420
         ? 2.0
-        : width < 520
+        : width < 760
         ? 3.0
-        : width < 780
-        ? 4.0
-        : 8.0;
+        : 6.0;
     final groupSpacing = width < 420 ? 8.0 : 12.0;
     final foundationSpacing = width < 420 ? 4.0 : 8.0;
-    final baseCardWidth = (width - (tableauSpacing * 9)) / 10;
-    final cardWidth = baseCardWidth.clamp(28.0, 78.0);
+    final horizontalPadding = width < 420 ? 2.0 : 8.0;
+    final baseCardWidth =
+        (width - horizontalPadding - (tableauSpacing * 9)) / 10;
+    final cardWidth = baseCardWidth.clamp(24.0, 72.0);
     final cardHeight = cardWidth * 1.4;
 
     return _SpiderLayoutMetrics(
       cardWidth: cardWidth,
       cardHeight: cardHeight,
-      cornerRadius: math.max(6, cardWidth * 0.1),
+      cornerRadius: math.max(5, cardWidth * 0.1),
       groupSpacing: groupSpacing,
       foundationSpacing: foundationSpacing,
       tableauSpacing: tableauSpacing,
-      sectionSpacing: width < 420 ? 14.0 : 20.0,
-      faceDownOverlap: (cardHeight * 0.12).clamp(7.0, 11.0),
-      faceUpOverlap: (cardHeight * 0.22).clamp(16.0, 24.0),
+      sectionSpacing: width < 420 ? 12.0 : 18.0,
+      faceDownOverlap: (cardHeight * 0.10).clamp(5.0, 9.0),
+      faceUpOverlap: (cardHeight * 0.18).clamp(11.0, 18.0),
     );
   }
 }

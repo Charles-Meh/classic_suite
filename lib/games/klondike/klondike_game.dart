@@ -93,15 +93,7 @@ class _KlondikeGameState extends State<KlondikeGame>
     }
 
     if (saved != null) {
-      final shouldResume = await _showResumeDialog(saved) ?? false;
-      if (!mounted) {
-        return;
-      }
-      if (shouldResume) {
-        state = saved;
-      } else {
-        await prefs.remove(GameState.storageKey);
-      }
+      state = saved;
     }
 
     final nextStats = widget.initialState == null && saved == null
@@ -1686,8 +1678,6 @@ class _KlondikeGameState extends State<KlondikeGame>
                                   formatElapsedSeconds(state.elapsedSeconds),
                                   icon: Icons.timer_outlined,
                                 ),
-                                if (state.currentSeed != null)
-                                  _buildStatusChip('Seed ${state.currentSeed}'),
                               ],
                             ),
                             AnimatedSize(

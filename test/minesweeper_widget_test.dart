@@ -46,10 +46,16 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('launcher shows Minesweeper and navigates', (
+  testWidgets('launcher search finds Minesweeper and navigates', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const ClassicSuiteApp());
+
+    expect(find.text('Choose a game'), findsOneWidget);
+    expect(find.byIcon(Icons.search_rounded), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'mine');
+    await tester.pumpAndSettle();
 
     expect(find.text('Minesweeper'), findsOneWidget);
 
@@ -155,9 +161,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Minesweeper statistics'), findsOneWidget);
-    expect(find.text('Wins'), findsOneWidget);
-    expect(find.text('Best Easy'), findsOneWidget);
-    expect(find.text('00:12'), findsWidgets);
+    final dialog = find.byType(AlertDialog);
+    expect(
+      find.descendant(of: dialog, matching: find.text('Wins')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: dialog, matching: find.text('Best Easy')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: dialog, matching: find.text('00:12')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('restart button quickly resets the board', (

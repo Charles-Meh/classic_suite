@@ -20,7 +20,7 @@ void main() {
     expect(find.text('Sudoku'), findsOneWidget);
     expect(find.byKey(const Key('sudoku_cell_0_0')), findsOneWidget);
     expect(find.byKey(const Key('sudoku_new_puzzle')), findsOneWidget);
-    expect(find.byKey(const Key('sudoku_hint')), findsOneWidget);
+    expect(find.byKey(const Key('sudoku_hint')), findsNothing);
     expect(find.byTooltip('Settings'), findsOneWidget);
     expect(find.byTooltip('Help'), findsOneWidget);
     expect(find.text('Starter puzzle'), findsNothing);
@@ -115,7 +115,7 @@ void main() {
     );
   });
 
-  testWidgets('difficulty settings and hint keep board clean', (
+  testWidgets('difficulty settings switch puzzles in the no-hints layout', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: SudokuGame()));
@@ -131,6 +131,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Hard game started.'), findsOneWidget);
+    expect(find.byKey(const Key('sudoku_hint')), findsNothing);
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
@@ -142,20 +143,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Easy game started.'), findsOneWidget);
+    expect(find.byKey(const Key('sudoku_hint')), findsNothing);
+    expect(find.textContaining('Hint:'), findsNothing);
 
-    await tester.ensureVisible(find.byKey(const Key('sudoku_hint')));
-    await tester.tap(find.byKey(const Key('sudoku_hint')));
+    await tester.tap(find.byKey(const Key('sudoku_new_puzzle')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Hint: this cell can be solved now.'), findsOneWidget);
-    expect(find.byKey(const Key('sudoku_hint_cell_4_4')), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('sudoku_hint_cell_4_4')),
-        matching: find.text('5'),
-      ),
-      findsNothing,
-    );
+    expect(find.text('New easy game started.'), findsOneWidget);
+    expect(find.byKey(const Key('sudoku_hint')), findsNothing);
   });
 
   testWidgets('completed board shows solved message', (

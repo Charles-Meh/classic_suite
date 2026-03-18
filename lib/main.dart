@@ -35,8 +35,44 @@ class ClassicSuiteApp extends StatelessWidget {
     return MaterialApp(
       title: 'Classic Suite',
       themeMode: ThemeMode.system,
-      theme: ThemeData(colorScheme: lightScheme, useMaterial3: true),
-      darkTheme: ThemeData(colorScheme: darkScheme, useMaterial3: true),
+      theme: ThemeData(
+        colorScheme: lightScheme,
+        useMaterial3: true,
+        cardTheme: const CardThemeData(
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(24)),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          ),
+        ),
+      ),
+      darkTheme: ThemeData(
+        colorScheme: darkScheme,
+        useMaterial3: true,
+        cardTheme: const CardThemeData(
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(24)),
+          ),
+        ),
+      ),
       home: GameListPage(
         games: const [
           GameDefinition(title: 'Klondike Solitaire', builder: _buildKlondike),

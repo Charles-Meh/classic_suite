@@ -452,7 +452,7 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
       key: const Key('pyramid_waste_card'),
       card: top,
       selected: state.selectedCard == ref,
-      highlighted: state.isMatchCandidate(ref),
+      highlighted: false,
       onTap: () => _onCardTap(ref),
     );
   }

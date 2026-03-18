@@ -416,18 +416,16 @@ class _TriPeaksGameState extends State<TriPeaksGame>
     Key? key,
     VoidCallback? onTap,
   }) {
-    final borderColor = highlighted
-        ? const Color(0xFFFFD54F)
-        : Theme.of(context).colorScheme.outline.withValues(alpha: 0.25);
-    final glow = highlighted
-        ? [
-            const BoxShadow(
-              color: Color(0x66FFD54F),
-              blurRadius: 14,
-              spreadRadius: 2,
-            ),
-          ]
-        : null;
+    final borderColor = Theme.of(
+      context,
+    ).colorScheme.outline.withValues(alpha: 0.18);
+    final glow = <BoxShadow>[
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.10),
+        blurRadius: 10,
+        offset: const Offset(0, 3),
+      ),
+    ];
 
     return GestureDetector(
       key: key,
@@ -437,11 +435,11 @@ class _TriPeaksGameState extends State<TriPeaksGame>
         duration: kCardDropDuration,
         width: metrics.cardWidth,
         height: metrics.cardHeight,
-        padding: const EdgeInsets.all(2),
+        padding: EdgeInsets.zero,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(metrics.radius + 4),
-          color: highlighted ? const Color(0x22FFD54F) : Colors.transparent,
-          border: Border.all(color: borderColor, width: highlighted ? 2 : 1),
+          borderRadius: BorderRadius.circular(metrics.radius + 1),
+          color: Colors.transparent,
+          border: Border.all(color: borderColor, width: 0.6),
           boxShadow: glow,
         ),
         child: card == null
@@ -574,7 +572,7 @@ class _TriPeaksGameState extends State<TriPeaksGame>
                             state.tableau[position.index],
                             metrics,
                             key: Key('tripeaks_tableau_${position.index}'),
-                            highlighted: state.isValidMove(position.index),
+                            highlighted: false,
                             onTap: state.isValidMove(position.index)
                                 ? () => _removeCard(position.index)
                                 : null,

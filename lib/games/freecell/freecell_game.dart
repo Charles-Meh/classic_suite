@@ -1030,35 +1030,22 @@ class _FreeCellGameState extends State<FreeCellGame> {
                         ),
                       ),
                       SizedBox(height: metrics.sectionSpacing),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Wrap(
-                              spacing: metrics.groupSpacing,
-                              runSpacing: metrics.groupSpacing,
-                              children: [
-                                for (int i = 0; i < 4; i++)
-                                  _buildFreecellSlot(i, metrics),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.topRight,
-                              child: Wrap(
-                                spacing: metrics.groupSpacing,
-                                runSpacing: metrics.groupSpacing,
-                                alignment: WrapAlignment.end,
-                                children: [
-                                  for (int i = 0; i < 4; i++)
-                                    _buildFoundationSlot(i, metrics),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (int i = 0; i < 4; i++) ...[
+                              if (i > 0) SizedBox(width: metrics.groupSpacing),
+                              _buildFreecellSlot(i, metrics),
+                            ],
+                            SizedBox(width: metrics.groupSpacing * 2),
+                            for (int i = 0; i < 4; i++) ...[
+                              if (i > 0) SizedBox(width: metrics.groupSpacing),
+                              _buildFoundationSlot(i, metrics),
+                            ],
+                          ],
+                        ),
                       ),
                       SizedBox(height: metrics.sectionSpacing),
                       Expanded(

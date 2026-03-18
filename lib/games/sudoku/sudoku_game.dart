@@ -22,7 +22,6 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
   bool _loading = true;
   SudokuDifficulty _selectedDifficulty = SudokuDifficulty.easy;
   int _difficultyCursor = 0;
-  (int, int)? _hintedCell;
 
   @override
   void initState() {
@@ -60,7 +59,6 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
         _selectedDifficulty = state.difficulty;
         _syncDifficultyCursor();
       }
-      _hintedCell = null;
       _loading = false;
     });
   }
@@ -85,13 +83,8 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
     await prefs.setString(SudokuGameState.storageKey, state.encode());
   }
 
-  void _clearHintHighlight() {
-    _hintedCell = null;
-  }
-
   Future<void> _applyAndPersist(VoidCallback update) async {
     setState(() {
-      _clearHintHighlight();
       update();
     });
     await _persistState();
@@ -102,7 +95,6 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
     final nextIndex = pool.isEmpty ? 0 : (_difficultyCursor + 1) % pool.length;
 
     setState(() {
-      _hintedCell = null;
       _difficultyCursor = nextIndex;
       state = SudokuGameState(
         puzzleIndex: nextIndex,
@@ -116,7 +108,6 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
 
   Future<void> _setDifficulty(SudokuDifficulty difficulty) async {
     setState(() {
-      _hintedCell = null;
       _selectedDifficulty = difficulty;
       _difficultyCursor = 0;
       state = SudokuGameState(puzzleIndex: 0, difficulty: difficulty);
@@ -157,7 +148,7 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                   HelpBulletList(
                     items: [
                       'Tap a cell, then choose a number.',
-                      'Hint highlights a cell that can be solved from the current board.',
+                      'Use the color feedback to spot duplicates in a row, column, or box.',
                       'Undo reverses your last move.',
                       'The game autosaves as you play.',
                     ],
@@ -243,27 +234,8 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _handleHint() async {
-    setState(() {
-      final hint = state.nextHint();
-      if (hint == null) {
-        _hintedCell = null;
-        state.message = 'No solvable cell is available right now.';
-        return;
-      }
-
-      state.selectCell(hint.row, hint.col);
-      _hintedCell = (hint.row, hint.col);
-      state.message = 'Hint: this cell can be solved now.';
-    });
-    await _persistState();
-  }
-
   void _handleCellTap(int row, int col) {
     setState(() {
-      if (_hintedCell != (row, col)) {
-        _clearHintHighlight();
-      }
       state.selectCell(row, col);
     });
   }
@@ -362,10 +334,6 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                             if (label != null &&
                                 RegExp(r'^[1-9]$').hasMatch(label)) {
                               _handleDigitInput(int.parse(label));
-                              return KeyEventResult.handled;
-                            }
-                            if (label == 'h' || label == 'H') {
-                              _handleHint();
                               return KeyEventResult.handled;
                             }
                             if (event.logicalKey ==
@@ -485,12 +453,6 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
           icon: const Icon(Icons.undo),
           label: const Text('Undo'),
         ),
-        OutlinedButton.icon(
-          key: const Key('sudoku_hint'),
-          onPressed: state.completed ? null : _handleHint,
-          icon: const Icon(Icons.lightbulb_outline),
-          label: const Text('Hint'),
-        ),
       ],
     );
   }
@@ -546,22 +508,16 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
     final selected = state.isSelected(row, col);
     final related = state.isRelatedToSelection(row, col);
     final conflict = state.isConflictingCell(row, col);
-    final correct = state.isCorrectValue(row, col);
-    final hinted = _hintedCell == (row, col);
     final isBoxEdgeRight = (col + 1) % 3 == 0 && col != 8;
     final isBoxEdgeBottom = (row + 1) % 3 == 0 && row != 8;
 
     Color background = Colors.white;
-    if (hinted) {
-      background = const Color(0xFFFFF2B3);
-    } else if (selected) {
+    if (selected) {
       background = const Color(0xFFCCE4FF);
     } else if (conflict) {
       background = const Color(0xFFFAD2CF);
     } else if (related) {
       background = const Color(0xFFF3F7FD);
-    } else if (!given && value != 0) {
-      background = correct ? const Color(0xFFF6FBF7) : const Color(0xFFFFFBF1);
     }
 
     return GestureDetector(
@@ -569,9 +525,7 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
       child: AnimatedContainer(
         duration: kSudokuHintDuration,
         curve: Curves.easeOutCubic,
-        key: hinted
-            ? Key('sudoku_hint_cell_${row}_$col')
-            : Key('sudoku_cell_${row}_$col'),
+        key: Key('sudoku_cell_${row}_$col'),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: background,
@@ -602,24 +556,18 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
             ),
           ),
         ),
-        child: value == 0
-            ? const SizedBox.shrink()
-            : _buildValue(value, given, conflict),
+        child: value == 0 ? const SizedBox.shrink() : _buildValue(value, given),
       ),
     );
   }
 
-  Widget _buildValue(int value, bool given, bool conflict) {
+  Widget _buildValue(int value, bool given) {
     return Text(
       '$value',
       style: TextStyle(
         fontSize: 20,
         fontWeight: given ? FontWeight.w800 : FontWeight.w700,
-        color: conflict
-            ? const Color(0xFF8E1B10)
-            : given
-            ? const Color(0xFF1C2A3D)
-            : const Color(0xFF0D47A1),
+        color: const Color(0xFF1C2A3D),
       ),
     );
   }

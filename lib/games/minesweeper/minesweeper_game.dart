@@ -501,18 +501,9 @@ class _MinesweeperGameState extends State<MinesweeperGame>
   }
 
   Widget _buildBoard(BuildContext context, BoxConstraints viewportConstraints) {
-    final preferredBoardViewportHeight = switch (state.config.id) {
-      'easy' => 280.0,
-      'medium' => 320.0,
-      'hard' => 300.0,
-      _ => 300.0,
-    };
     final boardViewportHeight = math.max(
-      180.0,
-      math.min(
-        preferredBoardViewportHeight,
-        viewportConstraints.maxHeight - 320,
-      ),
+      220.0,
+      viewportConstraints.maxHeight - 300,
     );
 
     return Card(
@@ -531,58 +522,56 @@ class _MinesweeperGameState extends State<MinesweeperGame>
                   ? constraints.maxHeight
                   : boardViewportHeight - 24;
               const spacing = 2.0;
-              const minimumTileSize = 40.0;
+              const minimumTileSize = 8.0;
               final preferredMaxTileSize = switch (state.config.id) {
-                'easy' => 64.0,
-                'medium' => 48.0,
-                'hard' => 44.0,
-                _ => 44.0,
+                'easy' => 42.0,
+                'medium' => 30.0,
+                'hard' => 22.0,
+                _ => 22.0,
               };
-              final fittedTileSize = math.min(
-                (availableWidth / state.columns) - spacing,
-                (availableHeight / state.rows) - spacing,
-              );
-              final tileSize = fittedTileSize >= minimumTileSize
-                  ? math.min(preferredMaxTileSize, fittedTileSize)
-                  : minimumTileSize;
-              final boardWidth = state.columns * (tileSize + spacing);
-              final boardHeight = state.rows * (tileSize + spacing);
-              final viewportWidth = math.max(availableWidth, boardWidth);
-              final viewportHeight = math.max(availableHeight, boardHeight);
-
-              final board = SizedBox(
-                width: boardWidth,
-                height: boardHeight,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (int row = 0; row < state.rows; row++)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          for (int column = 0; column < state.columns; column++)
-                            _MinesweeperTile(
-                              key: Key('minesweeper_cell_${row}_$column'),
-                              cell: state.cellAt(row, column),
-                              size: tileSize,
-                              onTap: () => _handleCellTap(row, column),
-                              onLongPress: () =>
-                                  _handleCellLongPress(row, column),
-                            ),
-                        ],
-                      ),
-                  ],
+              final tileSize = math.max(
+                minimumTileSize,
+                math.min(
+                  preferredMaxTileSize,
+                  math.min(
+                    (availableWidth - (state.columns * spacing)) /
+                        state.columns,
+                    (availableHeight - (state.rows * spacing)) / state.rows,
+                  ),
                 ),
               );
+              final boardWidth = state.columns * (tileSize + spacing);
+              final boardHeight = state.rows * (tileSize + spacing);
 
-              return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SizedBox(
-                  width: viewportWidth,
-                  child: SingleChildScrollView(
-                    child: SizedBox(
-                      height: viewportHeight,
-                      child: Center(child: board),
+              return Center(
+                child: FittedBox(
+                  fit: BoxFit.contain,
+                  child: SizedBox(
+                    width: boardWidth,
+                    height: boardHeight,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (int row = 0; row < state.rows; row++)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (
+                                int column = 0;
+                                column < state.columns;
+                                column++
+                              )
+                                _MinesweeperTile(
+                                  key: Key('minesweeper_cell_${row}_$column'),
+                                  cell: state.cellAt(row, column),
+                                  size: tileSize,
+                                  onTap: () => _handleCellTap(row, column),
+                                  onLongPress: () =>
+                                      _handleCellLongPress(row, column),
+                                ),
+                            ],
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -863,43 +852,45 @@ class _MinesweeperTile extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       onLongPress: onLongPress,
-      child: AnimatedScale(
-        duration: kMinesweeperRevealDuration,
-        scale: revealed ? 0.98 : 1,
-        child: AnimatedContainer(
+      child: SizedBox(
+        width: size + 2,
+        height: size + 2,
+        child: AnimatedScale(
           duration: kMinesweeperRevealDuration,
-          curve: Curves.easeOutCubic,
-          width: size,
-          height: size,
-          margin: const EdgeInsets.all(1),
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: revealed
-                  ? scheme.outlineVariant
-                  : scheme.outline.withValues(alpha: 0.35),
-            ),
-            boxShadow: revealed
-                ? null
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-          ),
-          alignment: Alignment.center,
-          child: AnimatedSwitcher(
-            duration: kMinesweeperRevealDuration,
-            child: SizedBox(
-              key: ValueKey<String>(
-                '${cell.revealed}_${cell.flagged}_${cell.hasMine}_${cell.adjacentMines}_${cell.exploded}',
+          scale: revealed ? 0.98 : 1,
+          child: Container(
+            width: size,
+            height: size,
+            margin: const EdgeInsets.all(1),
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: revealed
+                    ? scheme.outlineVariant
+                    : scheme.outline.withValues(alpha: 0.35),
               ),
-              width: size,
-              height: size,
-              child: Center(child: child),
+              boxShadow: revealed
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+            ),
+            alignment: Alignment.center,
+            child: AnimatedSwitcher(
+              duration: kMinesweeperRevealDuration,
+              child: SizedBox(
+                key: ValueKey<String>(
+                  '${cell.revealed}_${cell.flagged}_${cell.hasMine}_${cell.adjacentMines}_${cell.exploded}',
+                ),
+                width: size,
+                height: size,
+                child: Center(child: child),
+              ),
             ),
           ),
         ),
