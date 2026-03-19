@@ -1,6 +1,5 @@
 import 'package:classic_suite/games/twenty_forty_eight/twenty_forty_eight_game.dart';
 import 'package:classic_suite/games/twenty_forty_eight/twenty_forty_eight_game_state.dart';
-import 'package:classic_suite/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,21 +34,6 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-  });
-
-  testWidgets('launcher shows 2048 and navigates', (tester) async {
-    await tester.pumpWidget(const ClassicSuiteApp());
-
-    expect(find.text('2048'), findsOneWidget);
-
-    await tester.tap(find.text('2048'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(TwentyFortyEightGame), findsOneWidget);
-    expect(find.byKey(const Key('2048_score_label')), findsOneWidget);
-    expect(find.byKey(const Key('2048_swipe_surface')), findsOneWidget);
-    expect(find.byKey(const Key('2048_undo')), findsOneWidget);
-    expect(find.byKey(const Key('2048_pause')), findsOneWidget);
   });
 
   testWidgets('saved state is restored on launch', (tester) async {

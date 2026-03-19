@@ -108,8 +108,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('FreeCell'), findsOneWidget);
-    expect(find.text('New Game'), findsOneWidget);
-    expect(find.text('Undo'), findsOneWidget);
+    expect(find.text('New Deal'), findsOneWidget);
+    expect(find.byTooltip('Undo'), findsOneWidget);
+    expect(find.byTooltip('Statistics'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('FreeCell renders on a short compact layout', (tester) async {
+    tester.view.physicalSize = const Size(390, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(home: FreeCellGame()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('FreeCell'), findsOneWidget);
+    expect(find.text('New Deal'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

@@ -490,7 +490,9 @@ class _MinesweeperGameState extends State<MinesweeperGame>
                 ),
                 GameStatItem(
                   label: 'Best',
-                  value: bestTime == null ? '—' : formatElapsedSeconds(bestTime),
+                  value: bestTime == null
+                      ? '—'
+                      : formatElapsedSeconds(bestTime),
                   icon: Icons.emoji_events_outlined,
                 ),
               ],
@@ -513,84 +515,75 @@ class _MinesweeperGameState extends State<MinesweeperGame>
     );
   }
 
-  Widget _buildBoard(BuildContext context, BoxConstraints viewportConstraints) {
-    final boardViewportHeight = math.max(
-      220.0,
-      viewportConstraints.maxHeight - 300,
-    );
-
+  Widget _buildBoard(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        height: boardViewportHeight,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final media = MediaQuery.of(context).size;
-              final availableWidth = constraints.maxWidth.isFinite
-                  ? constraints.maxWidth
-                  : media.width - 56;
-              final availableHeight = constraints.maxHeight.isFinite
-                  ? constraints.maxHeight
-                  : boardViewportHeight - 24;
-              const spacing = 2.0;
-              const minimumTileSize = 8.0;
-              final preferredMaxTileSize = switch (state.config.id) {
-                'easy' => 42.0,
-                'medium' => 30.0,
-                'hard' => 22.0,
-                _ => 22.0,
-              };
-              final tileSize = math.max(
-                minimumTileSize,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final media = MediaQuery.of(context).size;
+            final availableWidth = constraints.maxWidth.isFinite
+                ? constraints.maxWidth
+                : media.width - 56;
+            final availableHeight = constraints.maxHeight.isFinite
+                ? math.max(0.0, constraints.maxHeight)
+                : math.max(220.0, media.height - 320);
+            const spacing = 2.0;
+            const minimumTileSize = 8.0;
+            final preferredMaxTileSize = switch (state.config.id) {
+              'easy' => 42.0,
+              'medium' => 30.0,
+              'hard' => 22.0,
+              _ => 22.0,
+            };
+            final tileSize = math.max(
+              minimumTileSize,
+              math.min(
+                preferredMaxTileSize,
                 math.min(
-                  preferredMaxTileSize,
-                  math.min(
-                    (availableWidth - (state.columns * spacing)) /
-                        state.columns,
-                    (availableHeight - (state.rows * spacing)) / state.rows,
-                  ),
+                  (availableWidth - (state.columns * spacing)) / state.columns,
+                  (availableHeight - (state.rows * spacing)) / state.rows,
                 ),
-              );
-              final boardWidth = state.columns * (tileSize + spacing);
-              final boardHeight = state.rows * (tileSize + spacing);
+              ),
+            );
+            final boardWidth = state.columns * (tileSize + spacing);
+            final boardHeight = state.rows * (tileSize + spacing);
 
-              return Center(
-                child: FittedBox(
-                  fit: BoxFit.contain,
-                  child: SizedBox(
-                    width: boardWidth,
-                    height: boardHeight,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (int row = 0; row < state.rows; row++)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              for (
-                                int column = 0;
-                                column < state.columns;
-                                column++
-                              )
-                                _MinesweeperTile(
-                                  key: Key('minesweeper_cell_${row}_$column'),
-                                  cell: state.cellAt(row, column),
-                                  size: tileSize,
-                                  onTap: () => _handleCellTap(row, column),
-                                  onLongPress: () =>
-                                      _handleCellLongPress(row, column),
-                                ),
-                            ],
-                          ),
-                      ],
-                    ),
+            return Center(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: SizedBox(
+                  width: boardWidth,
+                  height: boardHeight,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int row = 0; row < state.rows; row++)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (
+                              int column = 0;
+                              column < state.columns;
+                              column++
+                            )
+                              _MinesweeperTile(
+                                key: Key('minesweeper_cell_${row}_$column'),
+                                cell: state.cellAt(row, column),
+                                size: tileSize,
+                                onTap: () => _handleCellTap(row, column),
+                                onLongPress: () =>
+                                    _handleCellLongPress(row, column),
+                              ),
+                          ],
+                        ),
+                    ],
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -694,18 +687,18 @@ class _MinesweeperGameState extends State<MinesweeperGame>
                 builder: (context, viewportConstraints) {
                   return Stack(
                     children: [
-                      Center(
+                      Align(
+                        alignment: Alignment.topCenter,
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 1100),
                           child: Padding(
                             padding: const EdgeInsets.all(16),
                             child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 _buildHeader(context),
                                 const SizedBox(height: 16),
-                                Expanded(child: _buildBoard(context, viewportConstraints)),
+                                Expanded(child: _buildBoard(context)),
                                 const SizedBox(height: 16),
                                 _buildControls(context),
                               ],

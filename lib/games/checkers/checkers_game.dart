@@ -238,8 +238,14 @@ class _CheckersGameState extends State<CheckersGame>
         title: const Text('Start new game?'),
         content: const Text('Your current Checkers game will be replaced.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Start')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Start'),
+          ),
         ],
       ),
     );
@@ -637,36 +643,52 @@ class _CheckersGameState extends State<CheckersGame>
                     children: [
                       _buildTopPanel(context),
                       const SizedBox(height: 16),
-                      Expanded(child: _buildHistory(context)),
+                      _buildHistory(context),
                     ],
                   );
                   return Stack(
                     children: [
-                      Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 1250),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: landscape
-                                ? Row(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                      landscape
+                          ? Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 1250,
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
                                     children: [
                                       Expanded(flex: 7, child: board),
                                       const SizedBox(width: 16),
                                       Expanded(flex: 5, child: sidePanel),
                                     ],
-                                  )
-                                : Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      board,
-                                      const SizedBox(height: 16),
-                                      Expanded(child: sidePanel),
-                                    ],
                                   ),
-                          ),
-                        ),
-                      ),
+                                ),
+                              ),
+                            )
+                          : SingleChildScrollView(
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 1250,
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        board,
+                                        const SizedBox(height: 16),
+                                        sidePanel,
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                       if (_playerWon) _buildWinOverlay(),
                     ],
                   );

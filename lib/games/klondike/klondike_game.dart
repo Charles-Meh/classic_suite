@@ -871,7 +871,7 @@ class _KlondikeGameState extends State<KlondikeGame>
   }
 
   Widget _buildWaste(_KlondikeLayoutMetrics metrics) {
-    final role = _wasteHintRole;
+    const role = _HintRole.none;
     if (state.waste.isEmpty) {
       return _buildHintFrame(
         key: role == _HintRole.none ? null : const Key('hint_waste'),
@@ -1277,7 +1277,7 @@ class _KlondikeGameState extends State<KlondikeGame>
     if (hint == null) {
       return _HintRole.none;
     }
-    return hint.cards.isNotEmpty && identical(hint.cards.first, card)
+    return hint.cards.any((hintCard) => identical(hintCard, card))
         ? _HintRole.source
         : _HintRole.none;
   }
@@ -1294,16 +1294,6 @@ class _KlondikeGameState extends State<KlondikeGame>
       return _HintRole.target;
     }
     return hint.source?.zone == KlondikeLocationZone.stock
-        ? _HintRole.source
-        : _HintRole.none;
-  }
-
-  _HintRole get _wasteHintRole {
-    final hint = _activeHint;
-    if (hint == null) {
-      return _HintRole.none;
-    }
-    return hint.source?.zone == KlondikeLocationZone.waste
         ? _HintRole.source
         : _HintRole.none;
   }
@@ -1421,8 +1411,14 @@ class _KlondikeGameState extends State<KlondikeGame>
         title: const Text('Start new game?'),
         content: const Text('Current progress will be lost.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('New Game')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('New Game'),
+          ),
         ],
       ),
     );
@@ -1438,8 +1434,14 @@ class _KlondikeGameState extends State<KlondikeGame>
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         title: const Text('Klondike Solitaire'),
         actions: [
-          IconButton(icon: const Icon(Icons.help_outline), onPressed: _openHelp),
-          IconButton(icon: const Icon(Icons.settings), onPressed: _openSettings),
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            onPressed: _openHelp,
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: _openSettings,
+          ),
         ],
       ),
       bottomNavigationBar: _buildBottomBar(),
@@ -1461,6 +1463,7 @@ class _KlondikeGameState extends State<KlondikeGame>
                       constraints.maxWidth,
                     );
                     final tableauHeight = _tableauRegionHeight(metrics);
+                    final tableauWidth = metrics.tableauWidth(7);
 
                     return Stack(
                       children: [
@@ -1515,24 +1518,25 @@ class _KlondikeGameState extends State<KlondikeGame>
                             Expanded(
                               child: SingleChildScrollView(
                                 padding: const EdgeInsets.only(bottom: 16),
-                                child: SizedBox(
-                                  height: tableauHeight,
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      for (int i = 0; i < 7; i++) ...[
-                                        if (i > 0)
-                                          SizedBox(
-                                            width: metrics.tableauSpacing,
+                                child: Align(
+                                  alignment: Alignment.topCenter,
+                                  child: SizedBox(
+                                    width: tableauWidth,
+                                    height: tableauHeight,
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        for (int i = 0; i < 7; i++)
+                                          _buildTableauPile(
+                                            i,
+                                            metrics,
+                                            tableauHeight,
                                           ),
-                                        _buildTableauPile(
-                                          i,
-                                          metrics,
-                                          tableauHeight,
-                                        ),
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1618,7 +1622,19 @@ class _KlondikeLayoutMetrics {
   final double wasteFanOffset;
   final double wasteSlotWidth;
 
+  double get pileFramePadding => 2;
+
+  double get pileOuterWidth => cardWidth + (pileFramePadding * 2);
+
+  double tableauWidth(int pileCount) {
+    if (pileCount <= 0) {
+      return 0;
+    }
+    return (pileOuterWidth * pileCount) + (tableauSpacing * (pileCount - 1));
+  }
+
   factory _KlondikeLayoutMetrics.fromWidth(double width) {
+    final safeWidth = math.max(0.0, width - 4);
     final tableauSpacing = width < 420
         ? 4.0
         : width < 700
@@ -1626,7 +1642,9 @@ class _KlondikeLayoutMetrics {
         : 10.0;
     final groupSpacing = width < 420 ? 8.0 : 12.0;
     final foundationSpacing = width < 420 ? 4.0 : 8.0;
-    final baseCardWidth = (width - (tableauSpacing * 6)) / 7;
+    const pileFramePadding = 2.0;
+    final baseCardWidth =
+        ((safeWidth - (tableauSpacing * 6)) / 7) - (pileFramePadding * 2);
     final cardWidth = baseCardWidth.clamp(42.0, 92.0);
     final cardHeight = cardWidth * 1.4;
     final faceDownOverlap = (cardHeight * 0.11).clamp(7.0, 12.0);

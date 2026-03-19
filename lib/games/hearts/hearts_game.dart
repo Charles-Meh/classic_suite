@@ -408,7 +408,8 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
                         Text('Match: ${state.matchScores[player]}'),
                         Text('Hand: ${state.handPoints[player]}'),
                         Text('Tricks: ${state.tricksWon[player]}'),
-                        if (player != 0) Text('Cards: ${state.hands[player].length}'),
+                        if (player != 0)
+                          Text('Cards: ${state.hands[player].length}'),
                       ],
                     ),
                   ),
@@ -687,21 +688,22 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
           : SafeArea(
               child: Stack(
                 children: [
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1200),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildScoreboard(context),
-                            const SizedBox(height: 16),
-                            Expanded(child: _buildTable(context)),
-                            const SizedBox(height: 16),
-                            _buildHumanHand(context),
-                          ],
+                  SingleChildScrollView(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1200),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildScoreboard(context),
+                              const SizedBox(height: 16),
+                              _buildTable(context),
+                              const SizedBox(height: 16),
+                              _buildHumanHand(context),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -763,7 +765,9 @@ class _CardFace extends StatelessWidget {
         width: compact ? 64 : 72,
         height: compact ? 86 : 100,
         borderColor: Theme.of(context).colorScheme.outlineVariant,
-        highlightColor: selected || playable ? Theme.of(context).colorScheme.primary : null,
+        highlightColor: selected || playable
+            ? Theme.of(context).colorScheme.primary
+            : null,
         borderWidth: selected || playable ? 2 : 1.2,
       ),
     );

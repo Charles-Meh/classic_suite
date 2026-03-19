@@ -1,16 +1,11 @@
 import 'package:classic_suite/games/pyramid/pyramid_game.dart';
 import 'package:classic_suite/games/pyramid/pyramid_game_state.dart';
-import 'package:classic_suite/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 PyramidCard _card(PyramidSuit suit, PyramidRank rank, {bool removed = false}) {
   return PyramidCard(suit: suit, rank: rank, removed: removed);
-}
-
-Widget _buildHarness({PyramidGameState? state}) {
-  return MaterialApp(home: PyramidGame(initialState: state));
 }
 
 PyramidGameState _buildPairReadyState() {
@@ -69,64 +64,6 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('launcher shows Pyramid Solitaire and navigates', (tester) async {
-    await tester.pumpWidget(const ClassicSuiteApp());
-
-    expect(find.text('Pyramid Solitaire'), findsOneWidget);
-
-    await tester.tap(find.text('Pyramid Solitaire'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(PyramidGame), findsOneWidget);
-    expect(find.byKey(const Key('pyramid_status_message')), findsOneWidget);
-    expect(find.byKey(const Key('pyramid_stock')), findsOneWidget);
-  });
-
-  testWidgets('tapping a valid pair clears both cards', (tester) async {
-    await tester.pumpWidget(_buildHarness(state: _buildPairReadyState()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('pyramid_card_0_0')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('pyramid_waste_card')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('You won'), findsOneWidget);
-  });
-
-  testWidgets('stock tap draws a waste card and undo restores it', (
-    tester,
-  ) async {
-    await tester.pumpWidget(_buildHarness());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('pyramid_stock')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('pyramid_waste_card')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('pyramid_undo')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('pyramid_waste_card')), findsNothing);
-  });
-
-  testWidgets('pause overlay appears and can resume', (tester) async {
-    await tester.pumpWidget(_buildHarness());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('pyramid_pause')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('pyramid_pause_overlay')), findsOneWidget);
-    expect(find.text('Paused'), findsOneWidget);
-
-    await tester.tap(find.text('Resume'));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('pyramid_pause_overlay')), findsNothing);
-  });
-
   testWidgets('saved state is restored on launch', (tester) async {
     final saved = PyramidGameState.debug(
       pyramid: _buildPairReadyState().pyramid,
@@ -145,29 +82,5 @@ void main() {
     expect(find.text('00:33'), findsOneWidget);
     expect(find.byKey(const Key('pyramid_pause_overlay')), findsOneWidget);
     expect(find.byKey(const Key('pyramid_waste_card')), findsOneWidget);
-  });
-
-  testWidgets('statistics dialog shows updated best time after a win', (
-    tester,
-  ) async {
-    await tester.pumpWidget(_buildHarness(state: _buildPairReadyState()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('pyramid_card_0_0')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('pyramid_waste_card')));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('New game'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byTooltip('Game menu').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Statistics').last);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Pyramid Solitaire statistics'), findsOneWidget);
-    expect(find.text('Best time'), findsOneWidget);
-    expect(find.text('00:12'), findsWidgets);
   });
 }

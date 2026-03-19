@@ -718,21 +718,34 @@ class _TriPeaksGameState extends State<TriPeaksGame>
                   );
                   return Stack(
                     children: [
-                      SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1100),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildHeader(context),
-                                const SizedBox(height: 16),
-                                _buildTableau(metrics),
-                              ],
+                      Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 1100,
+                                ),
+                                child: _buildHeader(context),
+                              ),
                             ),
                           ),
-                        ),
+                          const SizedBox(height: 16),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 1100,
+                                  ),
+                                  child: _buildTableau(metrics),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       if (state.paused || state.isWon || state.isLost)
                         _buildOverlay(metrics),

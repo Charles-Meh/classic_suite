@@ -60,7 +60,9 @@ class GameWinScreen extends StatelessWidget {
         alignment: Alignment.center,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final width = math.min(460.0, constraints.maxWidth - 32);
+            final availableWidth = math.max(0.0, constraints.maxWidth - 32);
+            final availableHeight = math.max(0.0, constraints.maxHeight - 32);
+            final width = math.min(460.0, availableWidth);
             return TweenAnimationBuilder<double>(
               tween: Tween(begin: 0.92, end: 1),
               duration: const Duration(milliseconds: 320),
@@ -71,7 +73,7 @@ class GameWinScreen extends StatelessWidget {
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxWidth: width,
-                  maxHeight: constraints.maxHeight - 32,
+                  maxHeight: availableHeight,
                 ),
                 child: Container(
                   width: width,

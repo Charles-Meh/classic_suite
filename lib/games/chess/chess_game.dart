@@ -355,8 +355,14 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
         title: const Text('Start new game?'),
         content: const Text('Your current Chess game will be replaced.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Start')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Start'),
+          ),
         ],
       ),
     );
@@ -708,20 +714,22 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
           : SafeArea(
               child: Stack(
                 children: [
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1250),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildTopPanel(context),
-                            const SizedBox(height: 16),
-                            _buildBoard(context),
-                            const SizedBox(height: 16),
-                            Expanded(child: _buildHistory(context)),
-                          ],
+                  SingleChildScrollView(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1250),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildTopPanel(context),
+                              const SizedBox(height: 16),
+                              _buildBoard(context),
+                              const SizedBox(height: 16),
+                              _buildHistory(context),
+                            ],
+                          ),
                         ),
                       ),
                     ),

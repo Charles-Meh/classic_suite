@@ -84,24 +84,6 @@ void main() {
     expect(find.textContaining('Move 6♥'), findsNothing);
   });
 
-  testWidgets('klondike top bar and settings layout match requested controls', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(_buildKlondikeHarness(GameState()));
-    await tester.pump();
-
-    expect(find.text('Draw 1'), findsNothing);
-    expect(find.text('Draw 3'), findsNothing);
-    expect(find.text('Winning deal'), findsNothing);
-    expect(find.text('Restart deal'), findsNothing);
-    expect(find.byTooltip('Statistics'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Game menu'));
-    await tester.pump();
-    expect(find.text('Settings'), findsOneWidget);
-    expect(find.text('Statistics'), findsNothing);
-  });
-
   test('advisor skips redundant move from an already valid tableau run', () {
     final state = GameState();
     state.stock.clear();

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:playing_cards/playing_cards.dart';
@@ -40,7 +39,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
   SpiderStats _stats = const SpiderStats();
   bool _loading = true;
   bool _hasRecordedCurrentWin = false;
-  int _dealAnimationNonce = 0;
 
   @override
   void initState() {
@@ -203,16 +201,9 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
     _statsStore.save(nextStats);
   }
 
-  void _triggerDealAnimation() {
-    setState(() {
-      _dealAnimationNonce++;
-    });
-  }
-
   void _handleStockTap() {
     final changed = _runRecordedMutation(state.dealFromStock);
     if (changed) {
-      _triggerDealAnimation();
       return;
     }
     if (state.stock.isNotEmpty) {
@@ -256,7 +247,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
       _activeHint = null;
       _activeTableauDrag = null;
       _hasRecordedCurrentWin = false;
-      _dealAnimationNonce = 0;
     });
     _recordStartedDeal(resetStreak: shouldResetStreak);
   }
@@ -809,9 +799,7 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
         final showDropHint =
             candidate.isNotEmpty || hintRole == _HintRole.target;
         return _buildHintFrame(
-          role: hintRole == _HintRole.target
-              ? _HintRole.target
-              : _HintRole.none,
+          role: _HintRole.none,
           borderRadius: BorderRadius.circular(metrics.cornerRadius + 6),
           padding: const EdgeInsets.all(2),
           child: SizedBox(
@@ -949,54 +937,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
         ],
       ),
     );
-  }
-
-  Widget _buildHintBanner() {
-    final hint = _activeHint;
-    return AnimatedSwitcher(
-      duration: kCardHighlightDuration,
-      child: hint == null
-          ? const SizedBox.shrink()
-          : Container(
-              key: const Key('spider_hint_banner'),
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    _hintIcon(hint.kind),
-                    size: 20,
-                    color: Colors.white.withValues(alpha: 0.92),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      hint.message,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.96),
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-    );
-  }
-
-  IconData _hintIcon(SpiderSuggestionKind kind) {
-    return switch (kind) {
-      SpiderSuggestionKind.moveRun => Icons.compare_arrows_rounded,
-      SpiderSuggestionKind.dealFromStock => Icons.layers_outlined,
-      SpiderSuggestionKind.noMoves => Icons.info_outline_rounded,
-    };
   }
 
   _HintRole _cardHintRole(int pileIndex, int cardIndex) {
@@ -1179,54 +1119,6 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildDealAnimationOverlay(_SpiderLayoutMetrics metrics) {
-    if (_dealAnimationNonce == 0) {
-      return const SizedBox.shrink();
-    }
-
-    final stockLeft = 0.0;
-    final stockTop = 0.0;
-    final targetTop =
-        metrics.cardHeight + metrics.groupSpacing + metrics.sectionSpacing;
-
-    return IgnorePointer(
-      child: TweenAnimationBuilder<double>(
-        key: ValueKey(_dealAnimationNonce),
-        tween: Tween(begin: 0, end: 1),
-        duration: kCardDealDuration,
-        curve: Curves.easeOutCubic,
-        builder: (context, value, child) {
-          return Stack(
-            children: [
-              for (int i = 0; i < 10; i++)
-                Positioned(
-                  left: ui.lerpDouble(
-                    stockLeft + (i % 3) * 2,
-                    i * (metrics.pileWidth + metrics.tableauSpacing),
-                    value,
-                  )!,
-                  top: ui.lerpDouble(stockTop + (i % 3) * 2, targetTop, value)!,
-                  child: Opacity(
-                    opacity: (1 - value * 0.55).clamp(0.0, 1.0),
-                    child: Transform.scale(
-                      scale: ui.lerpDouble(0.94, 1.0, value)!,
-                      child: ClassicPlayingCard(
-                        card: PlayingCard(Suit.spades, CardValue.ace),
-                        width: metrics.cardWidth,
-                        height: metrics.cardHeight,
-                        showBack: true,
-                        cornerRadius: metrics.cornerRadius,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   Future<void> _confirmNewDeal() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1284,6 +1176,7 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
                 constraints.maxWidth,
               );
               final tableauHeight = _tableauRegionHeight(metrics);
+              final tableauWidth = metrics.tableauWidth(state.tableau.length);
 
               return Stack(
                 children: [
@@ -1311,39 +1204,34 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
                           ),
                         ],
                       ),
-                      AnimatedSize(
-                        duration: kCardHighlightDuration,
-                        curve: Curves.easeOutCubic,
-                        child: _activeHint == null
-                            ? const SizedBox.shrink()
-                            : Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: _buildHintBanner(),
-                              ),
-                      ),
                       SizedBox(height: metrics.sectionSpacing),
                       Expanded(
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.only(bottom: 16),
-                          child: SizedBox(
-                            width: constraints.maxWidth,
-                            height: tableauHeight,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                for (int i = 0; i < 10; i++) ...[
-                                  if (i > 0)
-                                    SizedBox(width: metrics.tableauSpacing),
-                                  _buildTableauPile(i, metrics, tableauHeight),
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: SizedBox(
+                              width: tableauWidth,
+                              height: tableauHeight,
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  for (int i = 0; i < 10; i++)
+                                    _buildTableauPile(
+                                      i,
+                                      metrics,
+                                      tableauHeight,
+                                    ),
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  _buildDealAnimationOverlay(metrics),
                   if (state.isWon) _buildWinOverlay(metrics),
                 ],
               );
@@ -1409,9 +1297,19 @@ class _SpiderLayoutMetrics {
   final double faceDownOverlap;
   final double faceUpOverlap;
 
-  double get pileWidth => cardWidth + 4;
+  double get pileFramePadding => 2;
+
+  double get pileOuterWidth => cardWidth + (pileFramePadding * 2);
+
+  double tableauWidth(int pileCount) {
+    if (pileCount <= 0) {
+      return 0;
+    }
+    return (pileOuterWidth * pileCount) + (tableauSpacing * (pileCount - 1));
+  }
 
   factory _SpiderLayoutMetrics.fromWidth(double width) {
+    final safeWidth = math.max(0.0, width - 4);
     final tableauSpacing = width < 420
         ? 1.0
         : width < 760
@@ -1419,10 +1317,10 @@ class _SpiderLayoutMetrics {
         : 4.0;
     final groupSpacing = width < 420 ? 8.0 : 12.0;
     final foundationSpacing = width < 420 ? 4.0 : 8.0;
-    final horizontalPadding = width < 420 ? 8.0 : 10.0;
+    const pileFramePadding = 2.0;
     final baseCardWidth =
-        (width - horizontalPadding - (tableauSpacing * 9)) / 10;
-    final cardWidth = baseCardWidth.clamp(22.0, 64.0);
+        ((safeWidth - (tableauSpacing * 9)) / 10) - (pileFramePadding * 2);
+    final cardWidth = baseCardWidth.clamp(22.0, 72.0);
     final cardHeight = cardWidth * 1.4;
 
     return _SpiderLayoutMetrics(

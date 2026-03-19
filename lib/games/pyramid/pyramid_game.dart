@@ -656,21 +656,22 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
           : SafeArea(
               child: Stack(
                 children: [
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1100),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildHeader(context),
-                            const SizedBox(height: 16),
-                            _buildStockWasteArea(context),
-                            const SizedBox(height: 16),
-                            Expanded(child: _buildPyramid(context)),
-                          ],
+                  SingleChildScrollView(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1100),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildHeader(context),
+                              const SizedBox(height: 16),
+                              _buildStockWasteArea(context),
+                              const SizedBox(height: 16),
+                              _buildPyramid(context),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -734,7 +735,9 @@ class _StockCard extends StatelessWidget {
               Icon(canRecycle ? Icons.refresh_rounded : Icons.style_rounded),
               const SizedBox(height: 8),
               Text(
-                stockCount > 0 ? '$stockCount' : (canRecycle ? 'Recycle' : 'Empty'),
+                stockCount > 0
+                    ? '$stockCount'
+                    : (canRecycle ? 'Recycle' : 'Empty'),
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ],
@@ -752,7 +755,12 @@ class _EmptyPileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClassicCardPlaceholder(width: 82, height: 116, label: label, dark: false);
+    return ClassicCardPlaceholder(
+      width: 82,
+      height: 116,
+      label: label,
+      dark: false,
+    );
   }
 }
 
@@ -761,7 +769,12 @@ class _ClearedCardPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ClassicCardPlaceholder(width: 82, height: 116, label: '', dark: false);
+    return const ClassicCardPlaceholder(
+      width: 82,
+      height: 116,
+      label: '',
+      dark: false,
+    );
   }
 }
 

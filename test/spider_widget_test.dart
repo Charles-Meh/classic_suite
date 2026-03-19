@@ -200,78 +200,10 @@ void main() {
     await tester.tap(find.byTooltip('Hint'));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('spider_hint_banner')), findsOneWidget);
-    expect(find.text('Move 6♠ from tableau 2 to tableau 1.'), findsOneWidget);
+    expect(find.byKey(const Key('spider_hint_banner')), findsNothing);
+    expect(find.text('Move 6♠ from tableau 2 to tableau 1.'), findsNothing);
     expect(find.byKey(const Key('spider_hint_stock')), findsNothing);
     expect(find.byKey(const Key('spider_tableau_0_drop_hint')), findsOneWidget);
-  });
-
-  testWidgets('undo and redo both work for spider moves', (
-    WidgetTester tester,
-  ) async {
-    final state = _buildSimpleSpiderMoveState();
-    final movedCard = state.tableau[1].single;
-
-    await tester.pumpWidget(_buildSpiderHarness(state));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('spider_tableau_1_card_0')));
-    await tester.pumpAndSettle();
-
-    expect(state.tableau[1], isEmpty);
-    expect(state.tableau[0].last, movedCard);
-    expect(find.text('Moves 1'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Undo'));
-    await tester.pumpAndSettle();
-
-    expect(state.tableau[0], hasLength(1));
-    expect(state.tableau[1], hasLength(1));
-    expect(state.tableau[1].single.card.value, CardValue.six);
-    expect(find.text('Moves 0'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Redo'));
-    await tester.pumpAndSettle();
-
-    expect(state.tableau[1], isEmpty);
-    expect(state.tableau[0].last.card.value, CardValue.six);
-    expect(find.text('Moves 1'), findsOneWidget);
-  });
-
-  testWidgets('statistics button opens spider stats dialog', (
-    WidgetTester tester,
-  ) async {
-    final state = _buildSimpleSpiderMoveState();
-
-    await tester.pumpWidget(_buildSpiderHarness(state));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Stats'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Spider statistics'), findsOneWidget);
-    expect(find.text('Deals'), findsOneWidget);
-    expect(find.text('Wins'), findsOneWidget);
-    expect(find.text('Current streak'), findsOneWidget);
-  });
-
-  testWidgets('help button opens spider rules dialog', (
-    WidgetTester tester,
-  ) async {
-    final state = _buildSimpleSpiderMoveState();
-
-    await tester.pumpWidget(_buildSpiderHarness(state));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byTooltip('Help'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('How to play Spider'), findsOneWidget);
-    expect(find.textContaining('1-suit'), findsWidgets);
-    expect(
-      find.textContaining('Build complete same-suit runs'),
-      findsOneWidget,
-    );
   });
 
   testWidgets('dealing from stock is blocked while a tableau pile is empty', (

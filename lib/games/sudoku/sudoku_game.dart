@@ -273,7 +273,10 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
         .expand((row) => row)
         .where((value) => value != 0)
         .length;
-    final givens = state.givens.expand((row) => row).where((value) => value != 0).length;
+    final givens = state.givens
+        .expand((row) => row)
+        .where((value) => value != 0)
+        .length;
     final remaining = 81 - filled;
 
     await showDialog<void>(
@@ -336,7 +339,10 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final filled = state.board.expand((row) => row).where((value) => value != 0).length;
+    final filled = state.board
+        .expand((row) => row)
+        .where((value) => value != 0)
+        .length;
     final remaining = 81 - filled;
 
     return Scaffold(
@@ -383,10 +389,13 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
               ? const Center(child: CircularProgressIndicator())
               : LayoutBuilder(
                   builder: (context, constraints) {
+                    final reservedHeight = constraints.maxHeight >= 760
+                        ? 250.0
+                        : 190.0;
                     final boardSize = minValue(
                       constraints.maxWidth - 8,
-                      constraints.maxHeight - 250,
-                    ).clamp(250.0, 520.0).toDouble();
+                      constraints.maxHeight - reservedHeight,
+                    ).clamp(220.0, 520.0).toDouble();
 
                     return Stack(
                       children: [
@@ -398,24 +407,28 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                             }
 
                             final label = event.character;
-                            if (label != null && RegExp(r'^[1-9]$').hasMatch(label)) {
+                            if (label != null &&
+                                RegExp(r'^[1-9]$').hasMatch(label)) {
                               _handleDigitInput(int.parse(label));
                               return KeyEventResult.handled;
                             }
-                            if (event.logicalKey == LogicalKeyboardKey.backspace ||
+                            if (event.logicalKey ==
+                                    LogicalKeyboardKey.backspace ||
                                 event.logicalKey == LogicalKeyboardKey.delete ||
                                 event.logicalKey == LogicalKeyboardKey.digit0 ||
-                                event.logicalKey == LogicalKeyboardKey.numpad0) {
+                                event.logicalKey ==
+                                    LogicalKeyboardKey.numpad0) {
                               _handleClear();
                               return KeyEventResult.handled;
                             }
                             return KeyEventResult.ignored;
                           },
-                          child: Center(
+                          child: Align(
+                            alignment: Alignment.topCenter,
                             child: ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 720),
                               child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   GameStatsRow(
                                     dark: false,
@@ -440,35 +453,57 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                                   const SizedBox(height: 14),
                                   _buildMessageCard(),
                                   const SizedBox(height: 18),
-                                  SizedBox(
-                                    width: boardSize,
-                                    height: boardSize,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        border: Border.all(
-                                          color: const Color(0xFF23324A),
-                                          width: 2,
-                                        ),
-                                        borderRadius: BorderRadius.circular(16),
-                                        boxShadow: const [
-                                          BoxShadow(
-                                            color: Color(0x22000000),
-                                            blurRadius: 18,
-                                            offset: Offset(0, 10),
-                                          ),
-                                        ],
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 12,
                                       ),
                                       child: Column(
                                         children: [
-                                          for (int row = 0; row < 9; row++)
-                                            Expanded(child: _buildRow(row)),
+                                          Center(
+                                            child: SizedBox(
+                                              width: boardSize,
+                                              height: boardSize,
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white,
+                                                  border: Border.all(
+                                                    color: const Color(
+                                                      0xFF23324A,
+                                                    ),
+                                                    width: 2,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(16),
+                                                  boxShadow: const [
+                                                    BoxShadow(
+                                                      color: Color(0x22000000),
+                                                      blurRadius: 18,
+                                                      offset: Offset(0, 10),
+                                                    ),
+                                                  ],
+                                                ),
+                                                child: Column(
+                                                  children: [
+                                                    for (
+                                                      int row = 0;
+                                                      row < 9;
+                                                      row++
+                                                    )
+                                                      Expanded(
+                                                        child: _buildRow(row),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          _buildPad(),
                                         ],
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(height: 16),
-                                  _buildPad(),
                                 ],
                               ),
                             ),
@@ -641,7 +676,10 @@ class _StatRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        children: [Expanded(child: Text(label)), Text(value)],
+        children: [
+          Expanded(child: Text(label)),
+          Text(value),
+        ],
       ),
     );
   }

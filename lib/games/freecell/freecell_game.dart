@@ -469,46 +469,6 @@ class _FreeCellGameState extends State<FreeCellGame> {
         hint.sourceIndex == index;
   }
 
-  Widget _buildHintBanner() {
-    final hint = _activeHint;
-    return AnimatedSwitcher(
-      duration: kCardHighlightDuration,
-      child: hint == null
-          ? const SizedBox.shrink()
-          : Container(
-              key: const Key('freecell_hint_banner'),
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.lightbulb_outline_rounded,
-                    size: 20,
-                    color: Colors.white.withValues(alpha: 0.92),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      hint.message,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.96),
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-    );
-  }
-
   void _setActiveDrag(_ActiveFreeCellDrag drag) {
     if (_activeDrag == drag) {
       return;
@@ -963,6 +923,33 @@ class _FreeCellGameState extends State<FreeCellGame> {
     );
   }
 
+  Widget _buildStatusChip(String label, {IconData? icon}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.88)),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.92),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1006,91 +993,122 @@ class _FreeCellGameState extends State<FreeCellGame> {
                 constraints.maxWidth,
               );
               final cascadeHeight = _cascadeRegionHeight(metrics);
-              final cascadeBoardWidth =
-                  (metrics.cardWidth * 8) + (metrics.cascadeSpacing * 7);
+              final topShelfWidth = metrics.topShelfWidth(
+                freecellCount: state.freecells.length,
+                foundationCount: state.foundations.length,
+              );
+              final cascadeBoardWidth = metrics.cascadeBoardWidth(
+                state.cascades.length,
+              );
               return Stack(
                 children: [
                   Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            for (int i = 0; i < 4; i++) ...[
-                              if (i > 0) SizedBox(width: metrics.groupSpacing),
-                              _buildFoundationSlot(i, metrics),
-                            ],
-                          ],
-                        ),
-                      ),
-                      SizedBox(height: metrics.sectionSpacing * 0.75),
-                      GameStatsRow(
-                        items: [
-                          GameStatItem(
-                            label: 'Time',
-                            value: formatElapsedSeconds(state.elapsedSeconds),
-                            icon: Icons.timer_outlined,
-                          ),
-                          GameStatItem(
-                            label: 'Moves',
-                            value: '${state.moveCount}',
-                            icon: Icons.swipe_outlined,
-                          ),
-                        ],
-                      ),
-                      AnimatedSize(
-                        duration: kCardHighlightDuration,
-                        curve: Curves.easeOutCubic,
-                        child: _activeHint == null
-                            ? const SizedBox.shrink()
-                            : Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: _buildHintBanner(),
-                              ),
-                      ),
-                      SizedBox(height: metrics.sectionSpacing),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            for (int i = 0; i < 4; i++) ...[
-                              if (i > 0) SizedBox(width: metrics.groupSpacing),
-                              _buildFreecellSlot(i, metrics),
-                            ],
-                          ],
-                        ),
-                      ),
-                      SizedBox(height: metrics.sectionSpacing),
-                      Expanded(
+                      Align(
+                        alignment: Alignment.topCenter,
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: SizedBox(
                             width: math.max(
                               constraints.maxWidth,
-                              cascadeBoardWidth,
+                              topShelfWidth,
                             ),
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: SizedBox(
-                                height: cascadeHeight,
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    for (int i = 0; i < 8; i++) ...[
+                                    for (
+                                      int i = 0;
+                                      i < state.freecells.length;
+                                      i++
+                                    ) ...[
                                       if (i > 0)
-                                        SizedBox(width: metrics.cascadeSpacing),
-                                      _buildCascade(i, metrics, cascadeHeight),
+                                        SizedBox(width: metrics.groupSpacing),
+                                      _buildFreecellSlot(i, metrics),
                                     ],
                                   ],
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    for (
+                                      int i = 0;
+                                      i < state.foundations.length;
+                                      i++
+                                    ) ...[
+                                      if (i > 0)
+                                        SizedBox(width: metrics.groupSpacing),
+                                      _buildFoundationSlot(i, metrics),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: metrics.sectionSpacing * 0.75),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _buildStatusChip(
+                            formatElapsedSeconds(state.elapsedSeconds),
+                            icon: Icons.timer_outlined,
+                          ),
+                          _buildStatusChip(
+                            'Moves ${state.moveCount}',
+                            icon: Icons.swipe_outlined,
+                          ),
+                          _buildStatusChip(
+                            'Score ${state.score}',
+                            icon: Icons.emoji_events_outlined,
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: metrics.sectionSpacing),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: SizedBox(
+                                width: math.max(
+                                  constraints.maxWidth,
+                                  cascadeBoardWidth,
+                                ),
+                                child: SizedBox(
+                                  height: cascadeHeight,
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      for (int i = 0; i < 8; i++) ...[
+                                        if (i > 0)
+                                          SizedBox(
+                                            width: metrics.cascadeSpacing,
+                                          ),
+                                        _buildCascade(
+                                          i,
+                                          metrics,
+                                          cascadeHeight,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
                     ],
                   ),
                   if (state.isWon) _buildWinOverlay(),
@@ -1154,6 +1172,29 @@ class _FreeCellLayoutMetrics {
   final double cascadeSpacing;
   final double sectionSpacing;
   final double cascadeOverlap;
+
+  double slotRowWidth(int slotCount) {
+    if (slotCount <= 0) {
+      return 0;
+    }
+    return (cardWidth * slotCount) + (groupSpacing * (slotCount - 1));
+  }
+
+  double topShelfWidth({
+    required int freecellCount,
+    required int foundationCount,
+  }) {
+    return slotRowWidth(freecellCount) +
+        slotRowWidth(foundationCount) +
+        (groupSpacing * 2);
+  }
+
+  double cascadeBoardWidth(int cascadeCount) {
+    if (cascadeCount <= 0) {
+      return 0;
+    }
+    return (cardWidth * cascadeCount) + (cascadeSpacing * (cascadeCount - 1));
+  }
 
   factory _FreeCellLayoutMetrics.fromWidth(double width) {
     final cascadeSpacing = width < 480

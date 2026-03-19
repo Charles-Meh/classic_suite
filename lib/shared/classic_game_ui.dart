@@ -144,13 +144,18 @@ class GameBottomBar extends StatelessWidget {
               tooltip: 'Hint',
               icon: const Icon(Icons.lightbulb_outline_rounded),
             ),
-            const Spacer(),
-            FilledButton.icon(
-              onPressed: onNewDeal,
-              icon: const Icon(Icons.casino_outlined),
-              label: Text(newDealLabel),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: FilledButton.icon(
+                  onPressed: onNewDeal,
+                  icon: const Icon(Icons.casino_outlined),
+                  label: Text(newDealLabel),
+                ),
+              ),
             ),
-            const Spacer(),
+            const SizedBox(width: 12),
             IconButton.filledTonal(
               onPressed: onStatistics,
               tooltip: 'Statistics',
@@ -192,69 +197,50 @@ class ClassicPlayingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(cornerRadius);
-    if (showBack) {
-      return Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFD63B3B), Color(0xFF9F1F2A)],
-          ),
-          border: Border.all(
-            color: borderColor ?? Colors.white.withValues(alpha: 0.85),
-            width: borderWidth,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x22000000),
-              blurRadius: 6,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Center(
-          child: Container(
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(cornerRadius - 2),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
-            ),
-          ),
-        ),
-      );
-    }
 
     final isRed = card.suit == Suit.hearts || card.suit == Suit.diamonds;
     final color = disabled
         ? (isRed ? const Color(0xFFC62828) : const Color(0xFF1A1A1A))
               .withValues(alpha: 0.45)
         : (isRed ? const Color(0xFFC62828) : const Color(0xFF1A1A1A));
-    final rank = switch (card.value) {
-      CardValue.ace => 'A',
-      CardValue.two => '2',
-      CardValue.three => '3',
-      CardValue.four => '4',
-      CardValue.five => '5',
-      CardValue.six => '6',
-      CardValue.seven => '7',
-      CardValue.eight => '8',
-      CardValue.nine => '9',
-      CardValue.ten => '10',
-      CardValue.jack => 'J',
-      CardValue.queen => 'Q',
-      CardValue.king => 'K',
-      _ => '?',
-    };
-    final suit = switch (card.suit) {
-      Suit.clubs => '♣',
-      Suit.diamonds => '♦',
-      Suit.hearts => '♥',
-      Suit.spades => '♠',
-      _ => '?',
-    };
+
+    // Use the playing_cards package imagery where available for a more polished look.
+    // The package provides a card back image.
+    final backAsset = 'assets/card_imagery/back_001.png';
+
+    if (showBack) {
+      return Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: radius,
+          border: Border.all(
+            color: highlightColor ?? borderColor ?? const Color(0xFFD6D6D6),
+            width: borderWidth,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x22000000),
+              blurRadius: 5,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: Transform.scale(
+            scale: 1.035,
+            child: Image.asset(
+              backAsset,
+              fit: BoxFit.cover,
+              package: 'playing_cards',
+              filterQuality: FilterQuality.high,
+            ),
+          ),
+        ),
+      );
+    }
 
     return Container(
       width: width,
@@ -274,75 +260,35 @@ class ClassicPlayingCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
+      child: ClipRRect(
+        borderRadius: radius,
         child: Stack(
           children: [
-            Align(
-              alignment: Alignment.topLeft,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    rank,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: rank == '10' ? 16 : 18,
-                      fontWeight: FontWeight.w800,
-                      height: 0.95,
+            // Render a polished card face using the playing_cards package.
+            Positioned.fill(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: 64,
+                  height: 89,
+                  child: PlayingCardView(
+                    card: card,
+                    showBack: false,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: radius),
+                    style: PlayingCardViewStyle(
+                      cardBackgroundColor: Colors.white,
+                      surfaceTintColor: Colors.transparent,
+                      suitStyles: {
+                        card.suit: SuitStyle(
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      },
                     ),
                   ),
-                  Text(
-                    suit,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      height: 0.92,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Center(
-              child: Text(
-                suit,
-                style: TextStyle(
-                  color: color.withValues(alpha: 0.14),
-                  fontSize: height * 0.38,
-                  fontWeight: FontWeight.w700,
-                  height: 1,
-                ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.bottomRight,
-              child: RotatedBox(
-                quarterTurns: 2,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      rank,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: rank == '10' ? 16 : 18,
-                        fontWeight: FontWeight.w800,
-                        height: 0.95,
-                      ),
-                    ),
-                    Text(
-                      suit,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        height: 0.92,
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ),
