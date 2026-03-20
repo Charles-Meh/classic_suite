@@ -93,24 +93,8 @@ class KlondikeAdvisor {
       return null;
     }
 
-    final tableauMove = _bestTableauMoveForLocation(state, location);
     final canMoveToFoundation =
         location.cards(state).length == 1 && state.canMoveToFoundation(card);
-    final safeFoundationMove =
-        canMoveToFoundation &&
-        KlondikeAutocomplete.shouldAutoPromote(state, card);
-
-    if (safeFoundationMove || (canMoveToFoundation && tableauMove == null)) {
-      return KlondikeSuggestion(
-        kind: KlondikeSuggestionKind.moveToFoundation,
-        cards: [card],
-        source: location,
-      );
-    }
-
-    if (tableauMove != null) {
-      return tableauMove;
-    }
 
     if (canMoveToFoundation) {
       return KlondikeSuggestion(
@@ -222,6 +206,10 @@ class KlondikeAdvisor {
     GameState state,
     KlondikeLocation location,
   ) {
+    if (location.zone == KlondikeLocationZone.foundation) {
+      return null;
+    }
+
     final sourcePile = location.sourcePile(state);
     if (sourcePile == null) {
       return null;
@@ -332,10 +320,6 @@ class KlondikeAdvisor {
 
     if (source.zone == KlondikeLocationZone.waste) {
       score += 120;
-    }
-
-    if (source.zone == KlondikeLocationZone.foundation) {
-      score += 20;
     }
 
     if (targetPile.isNotEmpty) {

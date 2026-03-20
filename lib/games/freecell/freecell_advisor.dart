@@ -105,17 +105,22 @@ class FreeCellAdvisor {
           if (targetIndex == cascadeIndex) {
             continue;
           }
-          if (state.canMoveCardsToCascade(run, state.cascades[targetIndex])) {
-            return FreeCellHint(
-              kind: FreeCellHintKind.moveToCascade,
-              cards: run,
-              sourceZone: FreeCellHintSourceZone.cascade,
-              sourceIndex: cascadeIndex,
-              sourceCardIndex: start,
-              targetCascadeIndex: targetIndex,
-              message: 'Move ${_runLabel(run)} to cascade ${targetIndex + 1}.',
-            );
+          if (!state.canMoveCardsToCascade(run, state.cascades[targetIndex])) {
+            continue;
           }
+          final hint = FreeCellHint(
+            kind: FreeCellHintKind.moveToCascade,
+            cards: run,
+            sourceZone: FreeCellHintSourceZone.cascade,
+            sourceIndex: cascadeIndex,
+            sourceCardIndex: start,
+            targetCascadeIndex: targetIndex,
+            message: 'Move ${_runLabel(run)} to cascade ${targetIndex + 1}.',
+          );
+          if (_isEquivalentOrWorseCascadeMove(state, hint)) {
+            continue;
+          }
+          return hint;
         }
       }
     }
@@ -211,6 +216,36 @@ class FreeCellAdvisor {
       Suit.spades => 3,
       _ => 0,
     };
+  }
+
+  static bool _isEquivalentOrWorseCascadeMove(
+    FreeCellGameState state,
+    FreeCellHint hint,
+  ) {
+    if (hint.kind != FreeCellHintKind.moveToCascade ||
+        hint.sourceZone != FreeCellHintSourceZone.cascade ||
+        hint.sourceCardIndex == null ||
+        hint.sourceCardIndex == 0 ||
+        hint.targetCascadeIndex == null) {
+      return false;
+    }
+
+    final sourcePile = state.cascades[hint.sourceIndex!];
+    final targetPile = state.cascades[hint.targetCascadeIndex!];
+    if (targetPile.isEmpty) {
+      return false;
+    }
+
+    final sourceSupport = sourcePile[hint.sourceCardIndex! - 1];
+    final targetSupport = targetPile.last;
+    return sourceSupport.valueIndex == targetSupport.valueIndex &&
+        _isSameColor(sourceSupport, targetSupport);
+  }
+
+  static bool _isSameColor(KlondikeCard a, KlondikeCard b) {
+    final aRed = a.card.suit == Suit.hearts || a.card.suit == Suit.diamonds;
+    final bRed = b.card.suit == Suit.hearts || b.card.suit == Suit.diamonds;
+    return aRed == bRed;
   }
 
   static String _runLabel(List<KlondikeCard> cards) {

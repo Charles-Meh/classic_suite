@@ -1,13 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/animation_constants.dart';
 import '../../shared/classic_game_ui.dart';
+import '../../shared/duration_format.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
 
 import 'sudoku_game_state.dart';
+import 'sudoku_stats.dart';
+import 'sudoku_stats_store.dart';
+
+enum _SudokuEntryMode { value, note }
 
 class SudokuGame extends StatefulWidget {
   const SudokuGame({super.key, this.initialState});
@@ -20,9 +27,14 @@ class SudokuGame extends StatefulWidget {
 
 class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
   late SudokuGameState state;
+  final SudokuStatsStore _statsStore = SudokuStatsStore();
   bool _loading = true;
+  bool _hasRecordedCurrentWin = false;
+  _SudokuEntryMode _entryMode = _SudokuEntryMode.value;
+  SudokuStats _stats = const SudokuStats();
   SudokuDifficulty _selectedDifficulty = SudokuDifficulty.easy;
   int _difficultyCursor = 0;
+  Timer? _ticker;
 
   @override
   void initState() {
@@ -30,6 +42,7 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     state = widget.initialState?.copy() ?? SudokuGameState();
     _selectedDifficulty = state.difficulty;
+    _hasRecordedCurrentWin = state.completed;
     _syncDifficultyCursor();
     _loadSavedState();
   }
@@ -49,6 +62,7 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
     final loaded = SudokuGameState.tryDecode(
       prefs.getString(SudokuGameState.storageKey),
     );
+    final stats = await _statsStore.load();
 
     if (!mounted) {
       return;
@@ -60,8 +74,11 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
         _selectedDifficulty = state.difficulty;
         _syncDifficultyCursor();
       }
+      _stats = stats;
+      _hasRecordedCurrentWin = state.completed;
       _loading = false;
     });
+    _syncTicker();
   }
 
   @override
@@ -76,6 +93,8 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _ticker?.cancel();
+    _persistState();
     super.dispose();
   }
 
@@ -85,10 +104,45 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
   }
 
   Future<void> _applyAndPersist(VoidCallback update) async {
+    final wasCompleted = state.completed;
     setState(() {
       update();
     });
+    _syncTicker();
+    if (!wasCompleted && state.completed) {
+      await _recordWinIfNeeded();
+    }
     await _persistState();
+  }
+
+  void _syncTicker() {
+    _ticker?.cancel();
+    if (!mounted || _loading || state.completed) {
+      return;
+    }
+
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (!mounted || _loading || state.completed) {
+        return;
+      }
+      setState(() {
+        state.incrementElapsed();
+      });
+      await _persistState();
+    });
+  }
+
+  Future<void> _recordWinIfNeeded() async {
+    if (_hasRecordedCurrentWin) {
+      return;
+    }
+
+    _hasRecordedCurrentWin = true;
+    final nextStats = _stats.recordWin(state.difficulty, state.elapsedSeconds);
+    setState(() {
+      _stats = nextStats;
+    });
+    await _statsStore.save(nextStats);
   }
 
   Future<void> _newPuzzle() async {
@@ -101,9 +155,12 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
         puzzleIndex: nextIndex,
         difficulty: _selectedDifficulty,
       );
+      _hasRecordedCurrentWin = false;
+      _entryMode = _SudokuEntryMode.value;
       state.message =
           'New ${_selectedDifficulty.label.toLowerCase()} game started.';
     });
+    _syncTicker();
     await _persistState();
   }
 
@@ -112,8 +169,11 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
       _selectedDifficulty = difficulty;
       _difficultyCursor = 0;
       state = SudokuGameState(puzzleIndex: 0, difficulty: difficulty);
+      _hasRecordedCurrentWin = false;
+      _entryMode = _SudokuEntryMode.value;
       state.message = '${difficulty.label} game started.';
     });
+    _syncTicker();
     await _persistState();
   }
 
@@ -149,7 +209,8 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                   HelpBulletList(
                     items: [
                       'Tap a cell, then choose a number.',
-                      'Use the color feedback to spot duplicates in a row, column, or box.',
+                      'Turn on Notes to add pencil marks instead of final values.',
+                      'Use All notes to fill candidates for every open cell.',
                       'Undo reverses your last move.',
                       'The game autosaves as you play.',
                     ],
@@ -219,7 +280,11 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
 
   Future<void> _handleDigitInput(int value) async {
     await _applyAndPersist(() {
-      state.setSelectedValue(value);
+      if (_entryMode == _SudokuEntryMode.note) {
+        state.toggleNoteForSelection(value);
+      } else {
+        state.setSelectedValue(value);
+      }
     });
   }
 
@@ -232,6 +297,20 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
   Future<void> _handleUndo() async {
     await _applyAndPersist(() {
       state.undo();
+    });
+  }
+
+  Future<void> _handleFillAllNotes() async {
+    await _applyAndPersist(() {
+      state.autoFillAllPencilMarks();
+    });
+  }
+
+  void _toggleEntryMode() {
+    setState(() {
+      _entryMode = _entryMode == _SudokuEntryMode.value
+          ? _SudokuEntryMode.note
+          : _SudokuEntryMode.value;
     });
   }
 
@@ -289,9 +368,27 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
           children: [
             _StatRow(label: 'Difficulty', value: state.difficulty.label),
             _StatRow(label: 'Puzzle', value: state.puzzleName),
+            _StatRow(
+              label: 'Current time',
+              value: formatElapsedSeconds(state.elapsedSeconds),
+            ),
             _StatRow(label: 'Starter clues', value: '$givens'),
             _StatRow(label: 'Filled cells', value: '$filled / 81'),
             _StatRow(label: 'Remaining', value: '$remaining'),
+            _StatRow(
+              label: 'Best easy',
+              value: _formatBestTime(_stats.bestTimeFor(SudokuDifficulty.easy)),
+            ),
+            _StatRow(
+              label: 'Best medium',
+              value: _formatBestTime(
+                _stats.bestTimeFor(SudokuDifficulty.medium),
+              ),
+            ),
+            _StatRow(
+              label: 'Best hard',
+              value: _formatBestTime(_stats.bestTimeFor(SudokuDifficulty.hard)),
+            ),
           ],
         ),
         actions: [
@@ -327,6 +424,11 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
           icon: Icons.tune_rounded,
         ),
         WinScreenStat(
+          label: 'Time',
+          value: formatElapsedSeconds(state.elapsedSeconds),
+          icon: Icons.timer_outlined,
+        ),
+        WinScreenStat(
           label: 'Puzzle',
           value: state.puzzleName,
           icon: Icons.grid_4x4_rounded,
@@ -339,11 +441,7 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final filled = state.board
-        .expand((row) => row)
-        .where((value) => value != 0)
-        .length;
-    final remaining = 81 - filled;
+    final remaining = state.remainingCount;
 
     return Scaffold(
       appBar: AppBar(
@@ -407,6 +505,13 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                             }
 
                             final label = event.character;
+                            if (label == 'n' ||
+                                label == 'N' ||
+                                label == 'p' ||
+                                label == 'P') {
+                              _toggleEntryMode();
+                              return KeyEventResult.handled;
+                            }
                             if (label != null &&
                                 RegExp(r'^[1-9]$').hasMatch(label)) {
                               _handleDigitInput(int.parse(label));
@@ -439,9 +544,11 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                                         icon: Icons.tune_rounded,
                                       ),
                                       GameStatItem(
-                                        label: 'Filled',
-                                        value: '$filled/81',
-                                        icon: Icons.edit_note_rounded,
+                                        label: 'Time',
+                                        value: formatElapsedSeconds(
+                                          state.elapsedSeconds,
+                                        ),
+                                        icon: Icons.timer_outlined,
                                       ),
                                       GameStatItem(
                                         label: 'Left',
@@ -450,8 +557,6 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 14),
-                                  _buildMessageCard(),
                                   const SizedBox(height: 18),
                                   Expanded(
                                     child: SingleChildScrollView(
@@ -519,66 +624,78 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildMessageCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: state.completed
-            ? const Color(0xFFE3F4E9)
-            : Colors.white.withValues(alpha: 0.86),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 12,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Text(
-        state.message,
-        key: const Key('sudoku_status_message'),
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontWeight: state.completed ? FontWeight.w700 : FontWeight.w500,
-        ),
-      ),
-    );
-  }
-
   Widget _buildPad() {
-    final invalid = state.invalidValuesForSelection();
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 10,
-      runSpacing: 10,
+    final notesModeEnabled = _entryMode == _SudokuEntryMode.note;
+
+    return Column(
       children: [
-        for (int value = 1; value <= 9; value++)
-          SizedBox(
-            width: 56,
-            height: 56,
-            child: FilledButton(
-              key: Key('sudoku_digit_$value'),
-              onPressed: state.completed
-                  ? null
-                  : () => _handleDigitInput(value),
-              style: FilledButton.styleFrom(
-                backgroundColor: invalid.contains(value)
-                    ? const Color(0xFF9C4237)
-                    : null,
-              ),
-              child: Text('$value'),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            SizedBox(
+              height: 48,
+              child: notesModeEnabled
+                  ? FilledButton.icon(
+                      key: const Key('sudoku_notes_mode'),
+                      onPressed: state.completed ? null : _toggleEntryMode,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF234A7A),
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.edit_note_rounded),
+                      label: const Text('Notes'),
+                    )
+                  : OutlinedButton.icon(
+                      key: const Key('sudoku_notes_mode'),
+                      onPressed: state.completed ? null : _toggleEntryMode,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF234A7A),
+                      ),
+                      icon: const Icon(Icons.edit_note_rounded),
+                      label: const Text('Notes'),
+                    ),
             ),
-          ),
-        SizedBox(
-          height: 56,
-          child: OutlinedButton.icon(
-            key: const Key('sudoku_clear_cell'),
-            onPressed: state.completed ? null : _handleClear,
-            icon: const Icon(Icons.backspace_outlined),
-            label: const Text('Clear'),
-          ),
+            SizedBox(
+              height: 48,
+              child: OutlinedButton.icon(
+                key: const Key('sudoku_fill_all_notes'),
+                onPressed: state.completed ? null : _handleFillAllNotes,
+                icon: const Icon(Icons.auto_fix_high_rounded),
+                label: const Text('All notes'),
+              ),
+            ),
+            SizedBox(
+              height: 48,
+              child: OutlinedButton.icon(
+                key: const Key('sudoku_clear_cell'),
+                onPressed: state.completed ? null : _handleClear,
+                icon: const Icon(Icons.backspace_outlined),
+                label: const Text('Clear'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (int value = 1; value <= 9; value++)
+              SizedBox(
+                width: 56,
+                height: 56,
+                child: FilledButton(
+                  key: Key('sudoku_digit_$value'),
+                  onPressed: state.completed
+                      ? null
+                      : () => _handleDigitInput(value),
+                  child: Text('$value'),
+                ),
+              ),
+          ],
         ),
       ],
     );
@@ -594,18 +711,16 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
 
   Widget _buildCell(int row, int col) {
     final value = state.board[row][col];
+    final notes = state.notesForCell(row, col);
     final given = state.isGiven(row, col);
     final selected = state.isSelected(row, col);
     final related = state.isRelatedToSelection(row, col);
-    final conflict = state.isConflictingCell(row, col);
     final isBoxEdgeRight = (col + 1) % 3 == 0 && col != 8;
     final isBoxEdgeBottom = (row + 1) % 3 == 0 && row != 8;
 
     Color background = Colors.white;
     if (selected) {
       background = const Color(0xFFCCE4FF);
-    } else if (conflict) {
-      background = const Color(0xFFFAD2CF);
     } else if (related) {
       background = const Color(0xFFF3F7FD);
     }
@@ -646,9 +761,53 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
             ),
           ),
         ),
-        child: value == 0 ? const SizedBox.shrink() : _buildValue(value, given),
+        child: value == 0 ? _buildNotes(notes) : _buildValue(value, given),
       ),
     );
+  }
+
+  Widget _buildNotes(Set<int> notes) {
+    if (notes.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(3),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          for (int row = 0; row < 3; row++)
+            Expanded(
+              child: Row(
+                children: [
+                  for (int col = 0; col < 3; col++)
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          notes.contains(row * 3 + col + 1)
+                              ? '${row * 3 + col + 1}'
+                              : '',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF516073),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatBestTime(int? seconds) {
+    if (seconds == null) {
+      return '--';
+    }
+    return formatElapsedSeconds(seconds);
   }
 
   Widget _buildValue(int value, bool given) {

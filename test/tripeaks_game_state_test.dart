@@ -1,3 +1,4 @@
+import 'package:classic_suite/games/tripeaks/tripeaks_advisor.dart';
 import 'package:classic_suite/games/tripeaks/tripeaks_game_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:playing_cards/playing_cards.dart';
@@ -93,6 +94,39 @@ void main() {
     expect(next.currentRun, 0);
     expect(next.wasteTop.card.value, CardValue.king);
     expect(next.status, TriPeaksStatus.lost);
+  });
+
+  test('advisor prefers the first playable exposed card', () {
+    final tableau = List<TriPeaksCard?>.filled(28, null);
+    tableau[18] = _card(CardValue.eight);
+    tableau[19] = _card(CardValue.seven);
+
+    final state = TriPeaksGameState.debug(
+      tableau: tableau,
+      stock: [_card(CardValue.queen)],
+      waste: [_card(CardValue.nine)],
+    );
+
+    final hint = TriPeaksAdvisor.bestHint(state);
+
+    expect(hint.kind, TriPeaksHintKind.removeCard);
+    expect(hint.tableauIndex, 18);
+  });
+
+  test('advisor falls back to the stock when no tableau move is available', () {
+    final tableau = List<TriPeaksCard?>.filled(28, null);
+    tableau[18] = _card(CardValue.five);
+
+    final state = TriPeaksGameState.debug(
+      tableau: tableau,
+      stock: [_card(CardValue.king)],
+      waste: [_card(CardValue.nine)],
+    );
+
+    final hint = TriPeaksAdvisor.bestHint(state);
+
+    expect(hint.kind, TriPeaksHintKind.drawStock);
+    expect(hint.tableauIndex, isNull);
   });
 
   test('encode and decode round-trip preserves state', () {

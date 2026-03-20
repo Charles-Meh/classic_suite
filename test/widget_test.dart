@@ -151,6 +151,63 @@ void main() {
     expect(find.byKey(const Key('tableau_0_drop_hint')), findsOneWidget);
   });
 
+  test('advisor tap prefers foundation over tableau when both are valid', () {
+    final state = GameState();
+    state.stock.clear();
+    state.waste.clear();
+    for (final pile in state.foundations) {
+      pile.clear();
+    }
+    for (final pile in state.tableau) {
+      pile.clear();
+    }
+
+    state.foundationForSuit(Suit.hearts).addAll([
+      KlondikeCard(PlayingCard(Suit.hearts, CardValue.ace), faceUp: true),
+      KlondikeCard(PlayingCard(Suit.hearts, CardValue.two), faceUp: true),
+    ]);
+
+    final threeHearts = KlondikeCard(
+      PlayingCard(Suit.hearts, CardValue.three),
+      faceUp: true,
+    );
+    state.tableau[0].add(threeHearts);
+    state.tableau[1].add(
+      KlondikeCard(PlayingCard(Suit.spades, CardValue.four), faceUp: true),
+    );
+
+    final move = KlondikeAdvisor.bestTapMove(state, threeHearts);
+
+    expect(move, isNotNull);
+    expect(move!.kind, KlondikeSuggestionKind.moveToFoundation);
+    expect(move.cards, [threeHearts]);
+  });
+
+  test('advisor tap ignores tableau-only moves', () {
+    final state = GameState();
+    state.stock.clear();
+    state.waste.clear();
+    for (final pile in state.foundations) {
+      pile.clear();
+    }
+    for (final pile in state.tableau) {
+      pile.clear();
+    }
+
+    final sixHearts = KlondikeCard(
+      PlayingCard(Suit.hearts, CardValue.six),
+      faceUp: true,
+    );
+    state.tableau[0].add(sixHearts);
+    state.tableau[1].add(
+      KlondikeCard(PlayingCard(Suit.spades, CardValue.seven), faceUp: true),
+    );
+
+    final move = KlondikeAdvisor.bestTapMove(state, sixHearts);
+
+    expect(move, isNull);
+  });
+
   test('advisor skips redundant tableau tap moves on already valid runs', () {
     final state = GameState();
     state.stock.clear();

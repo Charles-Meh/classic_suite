@@ -80,7 +80,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('00:33'), findsOneWidget);
-    expect(find.byKey(const Key('pyramid_pause_overlay')), findsOneWidget);
+    expect(find.byKey(const Key('pyramid_top_shelf')), findsOneWidget);
+    expect(find.byKey(const Key('pyramid_help_action')), findsOneWidget);
+    expect(find.byKey(const Key('pyramid_settings_action')), findsOneWidget);
+    expect(find.byKey(const Key('pyramid_pause_overlay')), findsNothing);
+    expect(find.byKey(const Key('pyramid_pause')), findsNothing);
+    expect(find.text('Waste'), findsNothing);
+    expect(find.text('Pyramid Solitaire'), findsOneWidget);
+    expect(find.byTooltip('Undo'), findsOneWidget);
+    expect(find.byTooltip('Hint'), findsOneWidget);
+    expect(find.byTooltip('Statistics'), findsOneWidget);
     expect(find.byKey(const Key('pyramid_waste_card')), findsOneWidget);
+  });
+
+  testWidgets('settings action opens pyramid settings dialog', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: PyramidGame(initialState: _buildPairReadyState())),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('pyramid_settings_action')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('pyramid_settings_dialog')), findsOneWidget);
+    expect(
+      find.byKey(const Key('pyramid_restart_deal_action')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('pyramid_new_deal_action')), findsOneWidget);
   });
 }

@@ -428,88 +428,165 @@ class _MinesweeperGameState extends State<MinesweeperGame>
     await _openCustomDialog();
   }
 
-  Widget _buildDifficultySelector() {
-    final options = [
+  List<MinesweeperConfig> _difficultyOptions() {
+    final customConfig = state.config.isPreset
+        ? _lastCustomConfig
+        : state.config;
+
+    return [
       MinesweeperConfig.easy(),
       MinesweeperConfig.medium(),
       MinesweeperConfig.hard(),
-      if (!state.config.isPreset) state.config else _lastCustomConfig,
+      customConfig,
     ];
+  }
 
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final config in options)
-          ChoiceChip(
-            key: Key('minesweeper_difficulty_${config.id}'),
-            label: Text(config.label),
-            selected:
-                state.config.id == config.id &&
-                (config.id != 'custom' || !state.config.isPreset),
-            onSelected: (_) async {
-              if (config.id == 'custom') {
-                await _openCustomDialog();
-              } else {
-                await _newGame(config);
-              }
-            },
+  Future<void> _handleDifficultySelection(String difficultyId) async {
+    final selected = _difficultyOptions().firstWhere(
+      (config) => config.id == difficultyId,
+      orElse: MinesweeperConfig.easy,
+    );
+
+    if (selected.id == 'custom') {
+      await _openCustomDialog();
+      return;
+    }
+
+    await _newGame(selected);
+  }
+
+  String _difficultyLabel(MinesweeperConfig config) {
+    if (config.isPreset) {
+      return config.label;
+    }
+
+    return 'Custom ${config.rows}x${config.columns}';
+  }
+
+  Widget _buildDifficultyButton(BuildContext context) {
+    return PopupMenuButton<String>(
+      key: const Key('minesweeper_difficulty_button'),
+      tooltip: 'Difficulty',
+      onSelected: _handleDifficultySelection,
+      itemBuilder: (context) {
+        return [
+          for (final config in _difficultyOptions())
+            PopupMenuItem<String>(
+              value: config.id,
+              child: Text(
+                config.id == 'custom' ? 'Custom...' : _difficultyLabel(config),
+                key: Key('minesweeper_difficulty_${config.id}'),
+              ),
+            ),
+        ];
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
           ),
-      ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.grid_view_rounded, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              _difficultyLabel(state.config),
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(width: 6),
+            const Icon(Icons.arrow_drop_down_rounded),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderStatChip(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: scheme.onSurface.withValues(alpha: 0.92)),
+          const SizedBox(width: 8),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: scheme.onSurface.withValues(alpha: 0.75),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  color: scheme.onSurface,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
-    final bestTime = _stats.bestTimeFor(state.config.id);
+    final options = [
+      _buildHeaderStatChip(
+        context,
+        label: 'Mines',
+        value: '${state.remainingMines}',
+        icon: Icons.flag_rounded,
+      ),
+      _buildHeaderStatChip(
+        context,
+        label: 'Time',
+        value: formatElapsedSeconds(state.elapsedSeconds),
+        icon: Icons.timer_outlined,
+      ),
+      _buildHeaderStatChip(
+        context,
+        label: 'Best',
+        value: _stats.bestTimeFor(state.config.id) == null
+            ? '—'
+            : formatElapsedSeconds(_stats.bestTimeFor(state.config.id)!),
+        icon: Icons.emoji_events_outlined,
+      ),
+    ];
 
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              '${state.config.label} • ${state.rows}×${state.columns} • ${state.mineCount} mines',
-              key: const Key('minesweeper_board_label'),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            GameStatsRow(
-              dark: false,
-              items: [
-                GameStatItem(
-                  label: 'Mines',
-                  value: '${state.remainingMines}',
-                  icon: Icons.flag_rounded,
-                ),
-                GameStatItem(
-                  label: 'Time',
-                  value: formatElapsedSeconds(state.elapsedSeconds),
-                  icon: Icons.timer_outlined,
-                ),
-                GameStatItem(
-                  label: 'Best',
-                  value: bestTime == null
-                      ? '—'
-                      : formatElapsedSeconds(bestTime),
-                  icon: Icons.emoji_events_outlined,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildDifficultySelector(),
-            const SizedBox(height: 12),
-            AnimatedSwitcher(
-              duration: kHintPulseDuration,
-              child: Text(
-                state.message,
-                key: ValueKey<String>(state.message),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-          ],
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: [_buildDifficultyButton(context), ...options],
         ),
       ),
     );
@@ -589,27 +666,16 @@ class _MinesweeperGameState extends State<MinesweeperGame>
     );
   }
 
-  Widget _buildControls(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: FilterChip(
-            key: const Key('minesweeper_flag_mode'),
-            selected: _flagMode,
-            onSelected: (value) {
-              setState(() {
-                _flagMode = value;
-              });
-            },
-            avatar: Icon(
-              _flagMode ? Icons.flag : Icons.touch_app_outlined,
-              size: 18,
-            ),
-            label: Text(_flagMode ? 'Flag mode on' : 'Reveal mode'),
-          ),
-        ),
-      ),
+  Widget _buildModeButton() {
+    return FilledButton.tonalIcon(
+      key: const Key('minesweeper_flag_mode'),
+      onPressed: () {
+        setState(() {
+          _flagMode = !_flagMode;
+        });
+      },
+      icon: Icon(_flagMode ? Icons.flag : Icons.touch_app_outlined),
+      label: Text(_flagMode ? 'Flag mode' : 'Reveal mode'),
     );
   }
 
@@ -646,6 +712,62 @@ class _MinesweeperGameState extends State<MinesweeperGame>
     );
   }
 
+  Widget _buildLossOverlay() {
+    final width = math.min(420.0, MediaQuery.of(context).size.width - 32);
+
+    return Positioned.fill(
+      child: Container(
+        color: const Color(0x88B3261E),
+        alignment: Alignment.center,
+        child: Container(
+          width: width,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.warning_amber_rounded, size: 42),
+              const SizedBox(height: 12),
+              Text('Boom', style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              const Text(
+                'That board is done. Start a new one from here whenever you are ready.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  FilledButton.icon(
+                    key: const Key('minesweeper_overlay_new_board'),
+                    onPressed: () => _newGame(state.config),
+                    icon: const Icon(Icons.casino_outlined),
+                    label: const Text('New Board'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _showStatistics,
+                    icon: const Icon(Icons.bar_chart_rounded),
+                    label: const Text('Statistics'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _backToMenu,
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    label: const Text('Back to Menu'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -669,13 +791,11 @@ class _MinesweeperGameState extends State<MinesweeperGame>
       bottomNavigationBar: _loading
           ? null
           : GameBottomBar(
+              leading: _buildModeButton(),
               onUndo: null,
-              undoEnabled: false,
-              onHint: () {
-                setState(() {
-                  _flagMode = !_flagMode;
-                });
-              },
+              onHint: null,
+              showUndoButton: false,
+              showHintButton: false,
               onNewDeal: _confirmAndStartNewBoard,
               onStatistics: _showStatistics,
               newDealLabel: 'New Board',
@@ -699,13 +819,12 @@ class _MinesweeperGameState extends State<MinesweeperGame>
                                 _buildHeader(context),
                                 const SizedBox(height: 16),
                                 Expanded(child: _buildBoard(context)),
-                                const SizedBox(height: 16),
-                                _buildControls(context),
                               ],
                             ),
                           ),
                         ),
                       ),
+                      if (state.isLost) _buildLossOverlay(),
                       if (state.isComplete) _buildWinOverlay(),
                     ],
                   );

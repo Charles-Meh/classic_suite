@@ -292,9 +292,16 @@ class _WinAnimation extends StatelessWidget {
 
   Widget _themedBackdrop(WinScreenTheme theme, double t, _WinPalette p) {
     switch (theme) {
+      case WinScreenTheme.klondike:
+        return _solitaireBackdrop(t, p, theme: theme);
       case WinScreenTheme.spider:
-        return CustomPaint(
-          painter: _SpiderWebPainter(t: t, color: p.accent),
+        return Stack(
+          children: [
+            _solitaireBackdrop(t, p, theme: theme),
+            CustomPaint(
+              painter: _SpiderWebPainter(t: t, color: p.accent),
+            ),
+          ],
         );
       case WinScreenTheme.sudoku:
         return CustomPaint(
@@ -303,6 +310,7 @@ class _WinAnimation extends StatelessWidget {
       case WinScreenTheme.pyramid:
         return Stack(
           children: [
+            _solitaireBackdrop(t, p, theme: theme),
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -391,8 +399,8 @@ class _WinAnimation extends StatelessWidget {
 
   Widget _themedForeground(WinScreenTheme theme, double t, _WinPalette p) {
     return switch (theme) {
-      WinScreenTheme.klondike => _cardBurst(t, p, stacks: true),
-      WinScreenTheme.spider => _cardBurst(t, p, completedRuns: true),
+      WinScreenTheme.klondike => _solitaireCelebration(t, p, theme: theme),
+      WinScreenTheme.spider => _solitaireCelebration(t, p, theme: theme),
       WinScreenTheme.freecell => _foundationFlow(t, p),
       WinScreenTheme.hearts => _heartsRise(t, p),
       WinScreenTheme.chess => _chessMate(t, p),
@@ -400,49 +408,655 @@ class _WinAnimation extends StatelessWidget {
       WinScreenTheme.minesweeper => _minesweeperSweep(t, p),
       WinScreenTheme.sudoku => _sudokuPulse(t, p),
       WinScreenTheme.twentyFortyEight => _tilesBurst(t, p),
-      WinScreenTheme.pyramid => _pyramidClear(t, p),
+      WinScreenTheme.pyramid => _solitaireCelebration(t, p, theme: theme),
       WinScreenTheme.tripeaks => _triPeaksCelebrate(t, p),
     };
   }
 
-  Widget _cardBurst(
+  Widget _solitaireBackdrop(
     double t,
     _WinPalette p, {
-    bool stacks = false,
-    bool completedRuns = false,
+    required WinScreenTheme theme,
   }) {
+    final beamColor = switch (theme) {
+      WinScreenTheme.spider => const Color(0xFFE7D8FF),
+      WinScreenTheme.pyramid => const Color(0xFFFFEEA8),
+      _ => Colors.white,
+    };
+
     return Stack(
       children: [
-        for (int i = 0; i < 7; i++)
-          Positioned(
-            left: ui.lerpDouble(78, 18 + i * 38, (t * 1.08).clamp(0, 1))!,
-            top: ui.lerpDouble(120, 26 + (i.isEven ? 0 : 18), t)!,
-            child: Transform.rotate(
-              angle: ui.lerpDouble(-0.2, -0.8 + (i * 0.18), t)!,
-              child: _miniCard(
-                color: i.isEven
-                    ? Colors.white
-                    : p.accent.withValues(alpha: 0.95),
-                border: p.text.withValues(alpha: 0.15),
-                label: completedRuns ? '${8 - i}' : null,
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0, 0.15),
+                radius: 0.95,
+                colors: [
+                  beamColor.withValues(alpha: 0.22 + (0.08 * t)),
+                  beamColor.withValues(alpha: 0.08 + (0.04 * t)),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 0.45, 1.0],
               ),
             ),
           ),
-        if (stacks)
-          for (int i = 0; i < 4; i++)
-            Positioned(
-              right: 18 + i * 10,
-              bottom: 14 + i * 4,
-              child: Opacity(
-                opacity: t,
-                child: _miniCard(
-                  color: Colors.white.withValues(alpha: 0.94),
-                  border: p.text.withValues(alpha: 0.1),
+        ),
+        Positioned(
+          left: ui.lerpDouble(-44, 12, t)!,
+          top: ui.lerpDouble(118, 18, Curves.easeOutQuad.transform(t))!,
+          child: Transform.rotate(
+            angle: -0.6,
+            child: Container(
+              width: 160,
+              height: 24,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                gradient: LinearGradient(
+                  colors: [
+                    beamColor.withValues(alpha: 0),
+                    beamColor.withValues(alpha: 0.3),
+                    beamColor.withValues(alpha: 0),
+                  ],
                 ),
               ),
             ),
+          ),
+        ),
       ],
     );
+  }
+
+  Widget _solitaireCelebration(
+    double t,
+    _WinPalette p, {
+    required WinScreenTheme theme,
+  }) {
+    final cards = _solitaireCardSpecs(theme);
+    final sparkles = _solitaireSparkles(theme);
+
+    return Stack(
+      key: ValueKey<String>('solitaire_win_animation_${theme.name}'),
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: 18,
+          right: 18,
+          bottom: 12,
+          child: Container(
+            key: const Key('solitaire_win_glow'),
+            height: 16,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              gradient: LinearGradient(
+                colors: [
+                  Colors.white.withValues(alpha: 0),
+                  p.accent.withValues(alpha: 0.42),
+                  Colors.white.withValues(alpha: 0),
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: p.accent.withValues(alpha: 0.22),
+                  blurRadius: 20,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+        ),
+        for (final sparkle in sparkles) _buildSolitaireSparkle(sparkle, t, p),
+        for (final card in cards) _buildSolitaireCard(card, t, p),
+        for (final accent in _solitaireFooterCards(theme))
+          _buildSolitaireFooterCard(accent, t, p),
+      ],
+    );
+  }
+
+  Widget _buildSolitaireSparkle(
+    _SolitaireSparkleSpec sparkle,
+    double t,
+    _WinPalette p,
+  ) {
+    final progress = _staggeredProgress(t, sparkle.delay, span: 0.5);
+    return Positioned(
+      left: ui.lerpDouble(
+        sparkle.start.dx,
+        sparkle.end.dx,
+        Curves.easeOutQuad.transform(progress),
+      )!,
+      top: ui.lerpDouble(
+        sparkle.start.dy,
+        sparkle.end.dy,
+        Curves.easeOutQuad.transform(progress),
+      )!,
+      child: Opacity(
+        opacity: (1 - progress * 0.35) * sparkle.opacity,
+        child: Transform.scale(
+          scale: ui.lerpDouble(0.6, 1.0, progress)!,
+          child: Icon(
+            sparkle.icon,
+            size: sparkle.size,
+            color: sparkle.color ?? p.accent,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSolitaireCard(_SolitaireCardSpec spec, double t, _WinPalette p) {
+    final progress = _staggeredProgress(t, spec.delay, span: 0.62);
+    final travel = Curves.easeOutCubic.transform(progress);
+    final wobble = math.sin((progress * math.pi) + spec.wobblePhase) * 4;
+    final lift = math.sin(progress * math.pi) * spec.arcHeight;
+
+    return Positioned(
+      left: ui.lerpDouble(spec.start.dx, spec.end.dx, travel)! + wobble,
+      top: ui.lerpDouble(spec.start.dy, spec.end.dy, travel)! - lift,
+      child: Opacity(
+        opacity: ui.lerpDouble(0.0, 1.0, Curves.easeOut.transform(progress))!,
+        child: Transform.rotate(
+          angle: ui.lerpDouble(spec.startAngle, spec.endAngle, travel)!,
+          child: Transform.scale(
+            scale: ui.lerpDouble(0.88, spec.endScale, travel)!,
+            child: _miniCard(
+              color: spec.color,
+              border: spec.border,
+              label: spec.centerLabel,
+              labelColor: spec.centerLabelColor,
+              cornerLabel: spec.cornerLabel,
+              cornerLabelColor: spec.cornerLabelColor,
+              accent: spec.accent,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSolitaireFooterCard(
+    _SolitaireFooterSpec spec,
+    double t,
+    _WinPalette p,
+  ) {
+    final progress = _staggeredProgress(t, spec.delay, span: 0.45);
+    return Positioned(
+      right: ui.lerpDouble(spec.right + 12, spec.right, progress)!,
+      bottom: ui.lerpDouble(spec.bottom - 8, spec.bottom, progress)!,
+      child: Opacity(
+        opacity: ui.lerpDouble(0.0, spec.opacity, progress)!,
+        child: Transform.rotate(
+          angle: spec.angle,
+          child: _miniCard(
+            color: spec.color,
+            border: spec.border,
+            label: spec.centerLabel,
+            labelColor: spec.centerLabelColor,
+            cornerLabel: spec.cornerLabel,
+            cornerLabelColor: spec.cornerLabelColor,
+            accent: spec.accent,
+          ),
+        ),
+      ),
+    );
+  }
+
+  double _staggeredProgress(double t, double delay, {double span = 0.6}) {
+    final shifted = ((t - delay) / span).clamp(0.0, 1.0);
+    return Curves.easeOutCubic.transform(shifted);
+  }
+
+  List<_SolitaireCardSpec> _solitaireCardSpecs(WinScreenTheme theme) {
+    switch (theme) {
+      case WinScreenTheme.spider:
+        return const [
+          _SolitaireCardSpec(
+            start: Offset(86, 114),
+            end: Offset(18, 56),
+            delay: 0.0,
+            wobblePhase: 0.4,
+            arcHeight: 16,
+            startAngle: -0.08,
+            endAngle: -0.74,
+            cornerLabel: 'K',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF25153A),
+            cornerLabelColor: Color(0xFF25153A),
+            color: Color(0xFFF8F4FF),
+            border: Color(0xFFBBA5F6),
+            accent: Color(0xFFB8A2FF),
+          ),
+          _SolitaireCardSpec(
+            start: Offset(88, 114),
+            end: Offset(46, 30),
+            delay: 0.06,
+            wobblePhase: 1.1,
+            arcHeight: 22,
+            startAngle: -0.03,
+            endAngle: -0.42,
+            cornerLabel: 'Q',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF25153A),
+            cornerLabelColor: Color(0xFF25153A),
+            color: Color(0xFFFFFFFF),
+            border: Color(0xFFD1C0FF),
+            accent: Color(0xFFD9CEFF),
+          ),
+          _SolitaireCardSpec(
+            start: Offset(90, 114),
+            end: Offset(78, 14),
+            delay: 0.12,
+            wobblePhase: 2.2,
+            arcHeight: 26,
+            startAngle: 0.0,
+            endAngle: -0.1,
+            cornerLabel: 'J',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF25153A),
+            cornerLabelColor: Color(0xFF25153A),
+            color: Color(0xFFF7F1FF),
+            border: Color(0xFFCCB8FF),
+            accent: Color(0xFFB8A2FF),
+            endScale: 1.1,
+          ),
+          _SolitaireCardSpec(
+            start: Offset(92, 114),
+            end: Offset(108, 28),
+            delay: 0.18,
+            wobblePhase: 0.9,
+            arcHeight: 20,
+            startAngle: 0.06,
+            endAngle: 0.26,
+            cornerLabel: '10',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF25153A),
+            cornerLabelColor: Color(0xFF25153A),
+            color: Color(0xFFFFFFFF),
+            border: Color(0xFFD9CBFF),
+            accent: Color(0xFFE7D8FF),
+          ),
+          _SolitaireCardSpec(
+            start: Offset(94, 114),
+            end: Offset(138, 52),
+            delay: 0.24,
+            wobblePhase: 2.7,
+            arcHeight: 18,
+            startAngle: 0.12,
+            endAngle: 0.56,
+            cornerLabel: '9',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF25153A),
+            cornerLabelColor: Color(0xFF25153A),
+            color: Color(0xFFF6F0FF),
+            border: Color(0xFFBBA5F6),
+            accent: Color(0xFFB8A2FF),
+          ),
+        ];
+      case WinScreenTheme.pyramid:
+        return const [
+          _SolitaireCardSpec(
+            start: Offset(88, 116),
+            end: Offset(18, 64),
+            delay: 0.0,
+            wobblePhase: 0.6,
+            arcHeight: 14,
+            startAngle: -0.06,
+            endAngle: -0.78,
+            cornerLabel: 'A',
+            centerLabel: '♦',
+            centerLabelColor: Color(0xFFC14C11),
+            cornerLabelColor: Color(0xFFC14C11),
+            color: Color(0xFFFFFAF0),
+            border: Color(0xFFF0C46F),
+            accent: Color(0xFFFFE19B),
+          ),
+          _SolitaireCardSpec(
+            start: Offset(90, 116),
+            end: Offset(48, 34),
+            delay: 0.07,
+            wobblePhase: 1.9,
+            arcHeight: 20,
+            startAngle: -0.02,
+            endAngle: -0.38,
+            cornerLabel: '7',
+            centerLabel: '♣',
+            centerLabelColor: Color(0xFF4E2D00),
+            cornerLabelColor: Color(0xFF4E2D00),
+            color: Color(0xFFFFFFFF),
+            border: Color(0xFFF2CB82),
+            accent: Color(0xFFFFE4A8),
+          ),
+          _SolitaireCardSpec(
+            start: Offset(92, 116),
+            end: Offset(78, 16),
+            delay: 0.14,
+            wobblePhase: 2.5,
+            arcHeight: 28,
+            startAngle: 0.0,
+            endAngle: -0.05,
+            cornerLabel: 'K',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF4E2D00),
+            cornerLabelColor: Color(0xFF4E2D00),
+            color: Color(0xFFFFFEF8),
+            border: Color(0xFFF0C46F),
+            accent: Color(0xFFFFD56A),
+            endScale: 1.12,
+          ),
+          _SolitaireCardSpec(
+            start: Offset(94, 116),
+            end: Offset(110, 32),
+            delay: 0.2,
+            wobblePhase: 1.3,
+            arcHeight: 22,
+            startAngle: 0.07,
+            endAngle: 0.32,
+            cornerLabel: '6',
+            centerLabel: '♥',
+            centerLabelColor: Color(0xFFC14C11),
+            cornerLabelColor: Color(0xFFC14C11),
+            color: Color(0xFFFFFFFF),
+            border: Color(0xFFF6D692),
+            accent: Color(0xFFFFE3A0),
+          ),
+          _SolitaireCardSpec(
+            start: Offset(96, 116),
+            end: Offset(140, 62),
+            delay: 0.27,
+            wobblePhase: 2.9,
+            arcHeight: 18,
+            startAngle: 0.13,
+            endAngle: 0.62,
+            cornerLabel: '4',
+            centerLabel: '♦',
+            centerLabelColor: Color(0xFFC14C11),
+            cornerLabelColor: Color(0xFFC14C11),
+            color: Color(0xFFFFFCF3),
+            border: Color(0xFFF0C46F),
+            accent: Color(0xFFFFD56A),
+          ),
+        ];
+      default:
+        return const [
+          _SolitaireCardSpec(
+            start: Offset(86, 114),
+            end: Offset(18, 56),
+            delay: 0.0,
+            wobblePhase: 0.3,
+            arcHeight: 16,
+            startAngle: -0.08,
+            endAngle: -0.76,
+            cornerLabel: 'A',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF2B2B2B),
+            cornerLabelColor: Color(0xFF2B2B2B),
+            color: Color(0xFFFFFFFF),
+            border: Color(0xFFE9C76A),
+            accent: Color(0xFFFFF1B8),
+          ),
+          _SolitaireCardSpec(
+            start: Offset(88, 114),
+            end: Offset(48, 28),
+            delay: 0.06,
+            wobblePhase: 1.4,
+            arcHeight: 24,
+            startAngle: -0.03,
+            endAngle: -0.44,
+            cornerLabel: 'K',
+            centerLabel: '♥',
+            centerLabelColor: Color(0xFFC73B32),
+            cornerLabelColor: Color(0xFFC73B32),
+            color: Color(0xFFFFFBF2),
+            border: Color(0xFFE8B96A),
+            accent: Color(0xFFFFE0A0),
+          ),
+          _SolitaireCardSpec(
+            start: Offset(90, 114),
+            end: Offset(78, 10),
+            delay: 0.12,
+            wobblePhase: 2.1,
+            arcHeight: 28,
+            startAngle: 0.0,
+            endAngle: -0.08,
+            cornerLabel: 'Q',
+            centerLabel: '♣',
+            centerLabelColor: Color(0xFF2B2B2B),
+            cornerLabelColor: Color(0xFF2B2B2B),
+            color: Color(0xFFFFFFFF),
+            border: Color(0xFFE4B55F),
+            accent: Color(0xFFFFF1B8),
+            endScale: 1.12,
+          ),
+          _SolitaireCardSpec(
+            start: Offset(92, 114),
+            end: Offset(108, 26),
+            delay: 0.18,
+            wobblePhase: 0.8,
+            arcHeight: 22,
+            startAngle: 0.05,
+            endAngle: 0.28,
+            cornerLabel: 'J',
+            centerLabel: '♦',
+            centerLabelColor: Color(0xFFC73B32),
+            cornerLabelColor: Color(0xFFC73B32),
+            color: Color(0xFFFFFCF5),
+            border: Color(0xFFEBC66A),
+            accent: Color(0xFFFFD86C),
+          ),
+          _SolitaireCardSpec(
+            start: Offset(94, 114),
+            end: Offset(138, 54),
+            delay: 0.24,
+            wobblePhase: 2.8,
+            arcHeight: 18,
+            startAngle: 0.12,
+            endAngle: 0.58,
+            cornerLabel: '10',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF2B2B2B),
+            cornerLabelColor: Color(0xFF2B2B2B),
+            color: Color(0xFFFFFFFF),
+            border: Color(0xFFE0B55D),
+            accent: Color(0xFFFFEEB1),
+          ),
+        ];
+    }
+  }
+
+  List<_SolitaireSparkleSpec> _solitaireSparkles(WinScreenTheme theme) {
+    final highlight = switch (theme) {
+      WinScreenTheme.spider => const Color(0xFFE8DBFF),
+      WinScreenTheme.pyramid => const Color(0xFFFFF0B9),
+      _ => const Color(0xFFFFF4CF),
+    };
+
+    return [
+      _SolitaireSparkleSpec(
+        start: const Offset(84, 98),
+        end: const Offset(28, 20),
+        delay: 0.04,
+        size: 12,
+        opacity: 0.85,
+        icon: Icons.auto_awesome,
+        color: highlight,
+      ),
+      _SolitaireSparkleSpec(
+        start: const Offset(92, 102),
+        end: const Offset(64, 40),
+        delay: 0.1,
+        size: 8,
+        opacity: 0.72,
+        icon: Icons.circle,
+        color: Colors.white,
+      ),
+      _SolitaireSparkleSpec(
+        start: const Offset(96, 104),
+        end: const Offset(108, 12),
+        delay: 0.16,
+        size: 10,
+        opacity: 0.8,
+        icon: Icons.auto_awesome,
+        color: highlight,
+      ),
+      _SolitaireSparkleSpec(
+        start: const Offset(98, 106),
+        end: const Offset(144, 28),
+        delay: 0.22,
+        size: 8,
+        opacity: 0.65,
+        icon: Icons.circle,
+        color: Colors.white.withValues(alpha: 0.92),
+      ),
+      _SolitaireSparkleSpec(
+        start: const Offset(90, 106),
+        end: const Offset(152, 54),
+        delay: 0.28,
+        size: 11,
+        opacity: 0.78,
+        icon: Icons.auto_awesome,
+        color: highlight,
+      ),
+    ];
+  }
+
+  List<_SolitaireFooterSpec> _solitaireFooterCards(WinScreenTheme theme) {
+    switch (theme) {
+      case WinScreenTheme.spider:
+        return const [
+          _SolitaireFooterSpec(
+            right: 18,
+            bottom: 18,
+            delay: 0.18,
+            opacity: 0.9,
+            angle: -0.06,
+            cornerLabel: '8',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF25153A),
+            cornerLabelColor: Color(0xFF25153A),
+            color: Color(0xFFFFFFFF),
+            border: Color(0xFFCCB8FF),
+            accent: Color(0xFFD9CEFF),
+          ),
+          _SolitaireFooterSpec(
+            right: 28,
+            bottom: 22,
+            delay: 0.24,
+            opacity: 0.72,
+            angle: 0.02,
+            cornerLabel: '7',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF25153A),
+            cornerLabelColor: Color(0xFF25153A),
+            color: Color(0xFFF8F4FF),
+            border: Color(0xFFBBA5F6),
+            accent: Color(0xFFB8A2FF),
+          ),
+          _SolitaireFooterSpec(
+            right: 38,
+            bottom: 26,
+            delay: 0.3,
+            opacity: 0.55,
+            angle: 0.08,
+            cornerLabel: '6',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF25153A),
+            cornerLabelColor: Color(0xFF25153A),
+            color: Color(0xFFF4EDFF),
+            border: Color(0xFFCCB8FF),
+            accent: Color(0xFFD9CEFF),
+          ),
+        ];
+      case WinScreenTheme.pyramid:
+        return const [
+          _SolitaireFooterSpec(
+            right: 18,
+            bottom: 18,
+            delay: 0.18,
+            opacity: 0.9,
+            angle: -0.08,
+            cornerLabel: '13',
+            centerLabel: '♦',
+            centerLabelColor: Color(0xFFC14C11),
+            cornerLabelColor: Color(0xFFC14C11),
+            color: Color(0xFFFFFEF6),
+            border: Color(0xFFF0C46F),
+            accent: Color(0xFFFFE19B),
+          ),
+          _SolitaireFooterSpec(
+            right: 28,
+            bottom: 22,
+            delay: 0.25,
+            opacity: 0.68,
+            angle: 0.04,
+            cornerLabel: '12',
+            centerLabel: '♣',
+            centerLabelColor: Color(0xFF4E2D00),
+            cornerLabelColor: Color(0xFF4E2D00),
+            color: Color(0xFFFFFFFF),
+            border: Color(0xFFF3CD84),
+            accent: Color(0xFFFFE7B3),
+          ),
+        ];
+      default:
+        return const [
+          _SolitaireFooterSpec(
+            right: 18,
+            bottom: 18,
+            delay: 0.18,
+            opacity: 0.94,
+            angle: -0.08,
+            cornerLabel: 'A',
+            centerLabel: '♣',
+            centerLabelColor: Color(0xFF2B2B2B),
+            cornerLabelColor: Color(0xFF2B2B2B),
+            color: Color(0xFFFFFFFF),
+            border: Color(0xFFE4B55F),
+            accent: Color(0xFFFFF1B8),
+          ),
+          _SolitaireFooterSpec(
+            right: 28,
+            bottom: 22,
+            delay: 0.24,
+            opacity: 0.78,
+            angle: 0.0,
+            cornerLabel: 'A',
+            centerLabel: '♦',
+            centerLabelColor: Color(0xFFC73B32),
+            cornerLabelColor: Color(0xFFC73B32),
+            color: Color(0xFFFFFBF2),
+            border: Color(0xFFE8B96A),
+            accent: Color(0xFFFFE0A0),
+          ),
+          _SolitaireFooterSpec(
+            right: 38,
+            bottom: 26,
+            delay: 0.3,
+            opacity: 0.62,
+            angle: 0.08,
+            cornerLabel: 'A',
+            centerLabel: '♥',
+            centerLabelColor: Color(0xFFC73B32),
+            cornerLabelColor: Color(0xFFC73B32),
+            color: Color(0xFFFFFFFF),
+            border: Color(0xFFEBC66A),
+            accent: Color(0xFFFFD86C),
+          ),
+          _SolitaireFooterSpec(
+            right: 48,
+            bottom: 30,
+            delay: 0.36,
+            opacity: 0.5,
+            angle: 0.14,
+            cornerLabel: 'A',
+            centerLabel: '♠',
+            centerLabelColor: Color(0xFF2B2B2B),
+            cornerLabelColor: Color(0xFF2B2B2B),
+            color: Color(0xFFFFFCF5),
+            border: Color(0xFFE0B55D),
+            accent: Color(0xFFFFEEB1),
+          ),
+        ];
+    }
   }
 
   Widget _foundationFlow(double t, _WinPalette p) {
@@ -696,26 +1310,6 @@ class _WinAnimation extends StatelessWidget {
     );
   }
 
-  Widget _pyramidClear(double t, _WinPalette p) {
-    return Stack(
-      children: [
-        for (int row = 0; row < 3; row++)
-          for (int col = 0; col <= row; col++)
-            Positioned(
-              left: ui.lerpDouble(76 - row * 16 + col * 34, 140 + col * 10, t)!,
-              top: ui.lerpDouble(92 - row * 26, 16 + row * 8, t)!,
-              child: Opacity(
-                opacity: 1 - (t * 0.8),
-                child: _miniCard(
-                  color: Colors.white,
-                  border: p.text.withValues(alpha: 0.12),
-                ),
-              ),
-            ),
-      ],
-    );
-  }
-
   Widget _triPeaksCelebrate(double t, _WinPalette p) {
     return Stack(
       children: [
@@ -746,6 +1340,10 @@ class _WinAnimation extends StatelessWidget {
     required Color color,
     required Color border,
     String? label,
+    Color? labelColor,
+    String? cornerLabel,
+    Color? cornerLabelColor,
+    Color? accent,
   }) {
     return Container(
       width: 28,
@@ -755,13 +1353,48 @@ class _WinAnimation extends StatelessWidget {
         borderRadius: BorderRadius.circular(7),
         border: Border.all(color: border),
       ),
-      alignment: Alignment.center,
-      child: label == null
-          ? null
-          : Text(
-              label,
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+      child: Stack(
+        children: [
+          if (accent != null)
+            Positioned(
+              left: 4,
+              right: 4,
+              top: 4,
+              child: Container(
+                height: 5,
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
             ),
+          if (cornerLabel != null)
+            Positioned(
+              left: 5,
+              top: accent == null ? 4 : 10,
+              child: Text(
+                cornerLabel,
+                style: TextStyle(
+                  fontSize: cornerLabel.length > 1 ? 7.5 : 8.5,
+                  fontWeight: FontWeight.w900,
+                  color: cornerLabelColor ?? const Color(0xFF2B2B2B),
+                ),
+              ),
+            ),
+          if (label != null)
+            Align(
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  color: labelColor ?? const Color(0xFF2B2B2B),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -787,6 +1420,92 @@ class _WinAnimation extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SolitaireCardSpec {
+  const _SolitaireCardSpec({
+    required this.start,
+    required this.end,
+    required this.delay,
+    required this.wobblePhase,
+    required this.arcHeight,
+    required this.startAngle,
+    required this.endAngle,
+    required this.cornerLabel,
+    required this.centerLabel,
+    required this.centerLabelColor,
+    required this.cornerLabelColor,
+    required this.color,
+    required this.border,
+    required this.accent,
+    this.endScale = 1.0,
+  });
+
+  final Offset start;
+  final Offset end;
+  final double delay;
+  final double wobblePhase;
+  final double arcHeight;
+  final double startAngle;
+  final double endAngle;
+  final String cornerLabel;
+  final String centerLabel;
+  final Color centerLabelColor;
+  final Color cornerLabelColor;
+  final Color color;
+  final Color border;
+  final Color accent;
+  final double endScale;
+}
+
+class _SolitaireSparkleSpec {
+  const _SolitaireSparkleSpec({
+    required this.start,
+    required this.end,
+    required this.delay,
+    required this.size,
+    required this.opacity,
+    required this.icon,
+    this.color,
+  });
+
+  final Offset start;
+  final Offset end;
+  final double delay;
+  final double size;
+  final double opacity;
+  final IconData icon;
+  final Color? color;
+}
+
+class _SolitaireFooterSpec {
+  const _SolitaireFooterSpec({
+    required this.right,
+    required this.bottom,
+    required this.delay,
+    required this.opacity,
+    required this.angle,
+    required this.cornerLabel,
+    required this.centerLabel,
+    required this.centerLabelColor,
+    required this.cornerLabelColor,
+    required this.color,
+    required this.border,
+    required this.accent,
+  });
+
+  final double right;
+  final double bottom;
+  final double delay;
+  final double opacity;
+  final double angle;
+  final String cornerLabel;
+  final String centerLabel;
+  final Color centerLabelColor;
+  final Color cornerLabelColor;
+  final Color color;
+  final Color border;
+  final Color accent;
 }
 
 class _SpiderWebPainter extends CustomPainter {

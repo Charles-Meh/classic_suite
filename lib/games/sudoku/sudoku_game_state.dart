@@ -86,6 +86,7 @@ class SudokuGameState {
     required this.solution,
     required this.board,
     required this.notes,
+    this.elapsedSeconds = 0,
     this.selectedRow,
     this.selectedCol,
     this.completed = false,
@@ -128,6 +129,7 @@ class SudokuGameState {
   final List<List<int>> solution;
   final List<List<int>> board;
   final List<List<Set<int>>> notes;
+  int elapsedSeconds;
   int? selectedRow;
   int? selectedCol;
   bool completed;
@@ -228,6 +230,7 @@ class SudokuGameState {
       solution: _copyBoard(solution),
       board: _copyBoard(board),
       notes: _copyNotes(notes),
+      elapsedSeconds: elapsedSeconds,
       selectedRow: selectedRow,
       selectedCol: selectedCol,
       completed: completed,
@@ -258,6 +261,7 @@ class SudokuGameState {
       solution: _copyBoard(puzzle.solution),
       board: board,
       notes: notes,
+      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
       selectedRow: selectedRow != null && selectedRow >= 0 && selectedRow < 9
           ? selectedRow
           : null,
@@ -280,6 +284,7 @@ class SudokuGameState {
         for (final row in notes)
           [for (final cell in row) (cell.toList()..sort())],
       ],
+      'elapsedSeconds': elapsedSeconds,
       'selectedRow': selectedRow,
       'selectedCol': selectedCol,
       'completed': completed,
@@ -647,6 +652,12 @@ class SudokuGameState {
     _restoreSnapshot(_redoStack.removeLast());
     message = 'Redid the move.';
     return true;
+  }
+
+  void incrementElapsed() {
+    if (!completed) {
+      elapsedSeconds += 1;
+    }
   }
 
   void _recomputeStatus() {

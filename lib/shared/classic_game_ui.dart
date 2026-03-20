@@ -93,23 +93,45 @@ class GameBottomBar extends StatelessWidget {
     super.key,
     this.onUndo,
     this.onHint,
+    this.leading,
     required this.onNewDeal,
     required this.onStatistics,
     this.undoEnabled = true,
     this.hintEnabled = true,
+    this.showUndoButton = true,
+    this.showHintButton = true,
     this.newDealLabel = 'New Deal',
   });
 
   final VoidCallback? onUndo;
   final VoidCallback? onHint;
+  final Widget? leading;
   final VoidCallback onNewDeal;
   final VoidCallback onStatistics;
   final bool undoEnabled;
   final bool hintEnabled;
+  final bool showUndoButton;
+  final bool showHintButton;
   final String newDealLabel;
 
   @override
   Widget build(BuildContext context) {
+    final leadingActions = <Widget>[
+      if (leading != null) leading!,
+      if (showUndoButton)
+        IconButton.filledTonal(
+          onPressed: undoEnabled ? onUndo : null,
+          tooltip: 'Undo',
+          icon: const Icon(Icons.undo_rounded),
+        ),
+      if (showHintButton)
+        IconButton.filledTonal(
+          onPressed: hintEnabled ? onHint : null,
+          tooltip: 'Hint',
+          icon: const Icon(Icons.lightbulb_outline_rounded),
+        ),
+    ];
+
     return SafeArea(
       top: false,
       child: Container(
@@ -133,18 +155,21 @@ class GameBottomBar extends StatelessWidget {
         ),
         child: Row(
           children: [
-            IconButton.filledTonal(
-              onPressed: undoEnabled ? onUndo : null,
-              tooltip: 'Undo',
-              icon: const Icon(Icons.undo_rounded),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filledTonal(
-              onPressed: hintEnabled ? onHint : null,
-              tooltip: 'Hint',
-              icon: const Icon(Icons.lightbulb_outline_rounded),
-            ),
-            const SizedBox(width: 12),
+            if (leadingActions.isNotEmpty)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (
+                    int index = 0;
+                    index < leadingActions.length;
+                    index++
+                  ) ...[
+                    if (index > 0) const SizedBox(width: 8),
+                    leadingActions[index],
+                  ],
+                ],
+              ),
+            if (leadingActions.isNotEmpty) const SizedBox(width: 12),
             Expanded(
               child: FittedBox(
                 fit: BoxFit.scaleDown,

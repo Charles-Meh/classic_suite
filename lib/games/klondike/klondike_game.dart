@@ -864,8 +864,22 @@ class _KlondikeGameState extends State<KlondikeGame>
         borderRadius: BorderRadius.circular(metrics.cornerRadius + 4),
         padding: const EdgeInsets.all(2),
         child: topFaceDown != null
-            ? _cardWidget(topFaceDown, metrics)
+            ? _buildStockCard(topFaceDown, metrics)
             : _buildSlotPlaceholder(metrics, role: role),
+      ),
+    );
+  }
+
+  Widget _buildStockCard(KlondikeCard card, _KlondikeLayoutMetrics metrics) {
+    return SizedBox(
+      width: metrics.cardWidth,
+      height: metrics.cardHeight,
+      child: ClassicPlayingCard(
+        card: card.card,
+        width: metrics.cardWidth,
+        height: metrics.cardHeight,
+        showBack: !card.faceUp,
+        cornerRadius: metrics.cornerRadius,
       ),
     );
   }

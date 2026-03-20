@@ -14,19 +14,21 @@ void main() {
     expect(state.board[0][2], 4);
   });
 
-  test('encoding and decoding preserve board state and notes', () {
+  test('encoding and decoding preserve board state, notes, and timer', () {
     final state = SudokuGameState();
     state.selectCell(0, 2);
     state.setSelectedValue(4);
     state.selectCell(0, 3);
     state.toggleNoteForSelection(6);
     state.toggleNoteForSelection(8);
+    state.elapsedSeconds = 37;
 
     final restored = SudokuGameState.tryDecode(state.encode());
 
     expect(restored, isNotNull);
     expect(restored!.board[0][2], 4);
     expect(restored.notesForCell(0, 3), containsAll(<int>{6, 8}));
+    expect(restored.elapsedSeconds, 37);
     expect(restored.puzzleId, state.puzzleId);
   });
 

@@ -7,7 +7,7 @@ class KlondikeAutocomplete {
   const KlondikeAutocomplete._();
 
   static bool canAutocomplete(GameState state) {
-    if (state.isWon || state.stock.isNotEmpty) {
+    if (state.isWon) {
       return false;
     }
     if (state.tableau.any((pile) => pile.any((card) => !card.faceUp))) {
@@ -18,8 +18,12 @@ class KlondikeAutocomplete {
     return finish(probe);
   }
 
-  static bool finish(GameState state, {int maxMoves = 200}) {
+  static bool finish(GameState state, {int maxMoves = 1000}) {
+    final seenStates = <String>{};
     for (int step = 0; step < maxMoves && !state.isWon; step++) {
+      if (!seenStates.add(state.encode())) {
+        break;
+      }
       if (!applyNextMove(state)) {
         break;
       }
@@ -28,10 +32,27 @@ class KlondikeAutocomplete {
   }
 
   static void autoPromote(GameState state) {
-    while (applyNextMove(state)) {}
+    while (_applyNextPromotion(state)) {}
   }
 
   static bool applyNextMove(GameState state) {
+    if (_applyNextPromotion(state)) {
+      return true;
+    }
+
+    if (state.stock.isNotEmpty) {
+      return state.drawFromStock() > 0;
+    }
+
+    if (state.waste.isNotEmpty) {
+      state.recycleWaste();
+      return true;
+    }
+
+    return false;
+  }
+
+  static bool _applyNextPromotion(GameState state) {
     if (state.waste.isNotEmpty) {
       final wasteCard = state.waste.last;
       if (shouldAutoPromote(state, wasteCard) &&

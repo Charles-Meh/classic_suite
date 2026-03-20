@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/animation_constants.dart';
+import '../../shared/classic_game_ui.dart';
 import '../../shared/duration_format.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
@@ -176,10 +177,6 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
     await _applyState(state.continuePast2048());
   }
 
-  Future<void> _handlePause() async {
-    await _applyState(state.pause());
-  }
-
   Future<void> _handleMove(MoveDirection direction) async {
     if (_gestureLock > 0) {
       return;
@@ -286,98 +283,31 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
   }
 
   Widget _buildHeader(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Score ${state.score} • Best ${_stats.bestScore}',
-                    key: const Key('2048_score_label'),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                IconButton(
-                  key: const Key('2048_restart'),
-                  tooltip: 'Restart game',
-                  onPressed: _startNewGame,
-                  icon: const Icon(Icons.restart_alt),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Game menu',
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'stats':
-                        await _showStatistics();
-                      case 'help':
-                        await _showHowToPlay();
-                      case 'restart':
-                        await _startNewGame();
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'stats', child: Text('Statistics')),
-                    PopupMenuItem(value: 'help', child: Text('How to play')),
-                    PopupMenuItem(value: 'restart', child: Text('Restart')),
-                  ],
-                ),
-              ],
+            Text(
+              'Score ${state.score} • Best ${_stats.bestScore}',
+              key: const Key('2048_score_label'),
+              style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 14),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                _CounterBadge(
+            GameStatsRow(
+              dark: false,
+              items: [
+                GameStatItem(
                   label: 'Moves',
                   value: '${state.moveCount}',
                   icon: Icons.swipe_rounded,
-                  color: scheme.primaryContainer,
                 ),
-                _CounterBadge(
-                  label: 'Top tile',
-                  value: '${state.highestTile}',
-                  icon: Icons.auto_awesome,
-                  color: scheme.secondaryContainer,
-                ),
-                _CounterBadge(
+                GameStatItem(
                   label: 'Time',
                   value: formatElapsedSeconds(state.elapsedSeconds),
                   icon: Icons.timer_outlined,
-                  color: scheme.tertiaryContainer,
                 ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                FilledButton.icon(
-                  key: const Key('2048_undo'),
-                  onPressed: state.canUndo ? _handleUndo : null,
-                  icon: const Icon(Icons.undo),
-                  label: const Text('Undo'),
-                ),
-                const SizedBox(width: 10),
-                OutlinedButton.icon(
-                  key: const Key('2048_pause'),
-                  onPressed: state.isPaused ? _handleResume : _handlePause,
-                  icon: Icon(state.isPaused ? Icons.play_arrow : Icons.pause),
-                  label: Text(state.isPaused ? 'Resume' : 'Pause'),
-                ),
-                const SizedBox(width: 10),
-                if (state.hasWon && !state.keepGoing)
-                  OutlinedButton.icon(
-                    key: const Key('2048_continue'),
-                    onPressed: _handleContinue,
-                    icon: const Icon(Icons.trending_up),
-                    label: const Text('Keep going'),
-                  ),
               ],
             ),
             const SizedBox(height: 12),
@@ -389,6 +319,15 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
+            if (state.hasWon && !state.keepGoing) ...[
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                key: const Key('2048_continue'),
+                onPressed: _handleContinue,
+                icon: const Icon(Icons.trending_up),
+                label: const Text('Keep going'),
+              ),
+            ],
           ],
         ),
       ),
@@ -584,23 +523,25 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
             onPressed: _showHowToPlay,
             icon: const Icon(Icons.help_outline),
           ),
-          PopupMenuButton<String>(
-            tooltip: 'Game menu',
-            onSelected: (value) async {
-              switch (value) {
-                case 'new':
-                  await _startNewGame();
-                case 'stats':
-                  await _showStatistics();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'new', child: Text('New game')),
-              PopupMenuItem(value: 'stats', child: Text('Statistics')),
-            ],
+          IconButton(
+            key: const Key('2048_settings_action'),
+            tooltip: 'Settings',
+            onPressed: null,
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
+      bottomNavigationBar: _loading
+          ? null
+          : GameBottomBar(
+              onUndo: _handleUndo,
+              undoEnabled: state.canUndo,
+              onHint: null,
+              showHintButton: false,
+              onNewDeal: _startNewGame,
+              onStatistics: _showStatistics,
+              newDealLabel: 'New Game',
+            ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
@@ -615,57 +556,12 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                         _buildHeader(context),
                         const SizedBox(height: 16),
                         _buildBoard(context),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Swipe anywhere over the board. Matching tiles merge once per move. Reach 2048, then keep going if you want.',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
                       ],
                     ),
                   ),
                 ),
               ),
             ),
-    );
-  }
-}
-
-class _CounterBadge extends StatelessWidget {
-  const _CounterBadge({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.labelSmall),
-              Text(value, style: Theme.of(context).textTheme.titleMedium),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

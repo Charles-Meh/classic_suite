@@ -10,6 +10,7 @@ import '../../shared/classic_game_ui.dart';
 import '../../shared/duration_format.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
+import 'tripeaks_advisor.dart';
 import 'tripeaks_game_state.dart';
 import 'tripeaks_stats.dart';
 import 'tripeaks_stats_store.dart';
@@ -34,6 +35,7 @@ class _TriPeaksGameState extends State<TriPeaksGame>
   final List<TriPeaksGameState> _history = [];
   final List<TriPeaksGameState> _redoHistory = [];
   TriPeaksStats _stats = const TriPeaksStats();
+  TriPeaksSuggestion? _activeHint;
   Timer? _ticker;
   bool _loading = true;
   bool _hasRecordedStart = false;
@@ -179,6 +181,7 @@ class _TriPeaksGameState extends State<TriPeaksGame>
     final previousStatus = state.status;
     setState(() {
       state = nextState;
+      _activeHint = null;
     });
 
     await _recordStartedGameIfNeeded();
@@ -254,6 +257,16 @@ class _TriPeaksGameState extends State<TriPeaksGame>
 
   Future<void> _removeCard(int index) async {
     await _recordMutation(state.removeCard(index));
+  }
+
+  void _showHint() {
+    final nextHint = TriPeaksAdvisor.bestHint(state);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _activeHint = nextHint.kind == TriPeaksHintKind.noMoves ? null : nextHint;
+    });
   }
 
   Future<void> _showStatistics() async {
@@ -338,55 +351,87 @@ class _TriPeaksGameState extends State<TriPeaksGame>
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'TriPeaks Solitaire',
-              style: Theme.of(context).textTheme.titleMedium,
+  bool _isHintedTableauCard(int index) {
+    return _activeHint?.kind == TriPeaksHintKind.removeCard &&
+        _activeHint?.tableauIndex == index;
+  }
+
+  bool get _isStockHinted => _activeHint?.kind == TriPeaksHintKind.drawStock;
+
+  Widget _buildTopShelf(_TriPeaksMetrics metrics) {
+    final details = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 340),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: AnimatedSwitcher(
+          duration: kCardHighlightDuration,
+          child: Text(
+            _activeHint?.message ?? state.message,
+            key: ValueKey<String>(_activeHint?.message ?? state.message),
+            textAlign: TextAlign.right,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.88),
             ),
-            const SizedBox(height: 12),
-            GameStatsRow(
-              dark: false,
-              items: [
-                GameStatItem(
-                  label: 'Score',
-                  value: '${state.score}',
-                  icon: Icons.stars_rounded,
-                ),
-                GameStatItem(
-                  label: 'Run',
-                  value: '${state.currentRun}',
-                  icon: Icons.bolt_rounded,
-                ),
-                GameStatItem(
-                  label: 'Best run',
-                  value: '${state.longestRun}',
-                  icon: Icons.timeline_rounded,
-                ),
-                GameStatItem(
-                  label: 'Stock',
-                  value: '${state.stock.length}',
-                  icon: Icons.layers_outlined,
-                ),
-                GameStatItem(
-                  label: 'Time',
-                  value: formatElapsedSeconds(state.elapsedSeconds),
-                  icon: Icons.timer_outlined,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            AnimatedSwitcher(
-              duration: kCardHighlightDuration,
-              child: Text(state.message, key: ValueKey<String>(state.message)),
-            ),
-          ],
+          ),
         ),
+      ),
+    );
+
+    final piles = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildStockPile(metrics),
+        SizedBox(width: metrics.columnGap * 0.75),
+        _buildCard(state.wasteTop, metrics, key: const Key('tripeaks_waste')),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compactLayout = constraints.maxWidth < 720;
+        if (compactLayout) {
+          return Column(
+            key: const Key('tripeaks_top_shelf'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              piles,
+              const SizedBox(height: 12),
+              Align(alignment: Alignment.centerRight, child: details),
+            ],
+          );
+        }
+
+        return Row(
+          key: const Key('tripeaks_top_shelf'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [piles, const Spacer(), details],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatsRow() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: GameStatsRow(
+        dark: true,
+        items: [
+          GameStatItem(
+            label: 'Score',
+            value: '${state.score}',
+            icon: Icons.stars_rounded,
+          ),
+          GameStatItem(
+            label: 'Cleared',
+            value: '${state.clearedCount}/28',
+            icon: Icons.layers_clear_outlined,
+          ),
+          GameStatItem(
+            label: 'Time',
+            value: formatElapsedSeconds(state.elapsedSeconds),
+            icon: Icons.timer_outlined,
+          ),
+        ],
       ),
     );
   }
@@ -421,22 +466,37 @@ class _TriPeaksGameState extends State<TriPeaksGame>
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(metrics.radius + 1),
           color: Colors.transparent,
-          border: Border.all(color: borderColor, width: 0.6),
-          boxShadow: glow,
+          border: Border.all(
+            color: highlighted ? const Color(0xFFFDE68A) : borderColor,
+            width: highlighted ? 2.2 : 0.6,
+          ),
+          boxShadow: highlighted
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.42),
+                    blurRadius: 18,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : glow,
         ),
-        child: card == null
-            ? DecoratedBox(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (card == null)
+              DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(metrics.radius),
-                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  color: Colors.white.withValues(alpha: 0.12),
                   border: Border.all(
-                    color: Theme.of(context).colorScheme.outlineVariant,
+                    color: Colors.white.withValues(alpha: 0.20),
                     style: BorderStyle.solid,
                   ),
                 ),
                 child: const SizedBox.expand(),
               )
-            : SizedBox(
+            else
+              SizedBox(
                 width: metrics.cardWidth,
                 height: metrics.cardHeight,
                 child: ClassicPlayingCard(
@@ -445,127 +505,136 @@ class _TriPeaksGameState extends State<TriPeaksGame>
                   height: metrics.cardHeight,
                   showBack: !card.faceUp,
                   cornerRadius: metrics.radius,
+                  highlightColor: highlighted ? const Color(0xFFFDE68A) : null,
+                  borderWidth: highlighted ? 2.2 : 1.2,
                 ),
               ),
+            if (highlighted)
+              Container(
+                key: key is ValueKey<String>
+                    ? ValueKey('${key.value}_hint')
+                    : null,
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildStockAndWaste(_TriPeaksMetrics metrics) {
-    return Row(
-      children: [
-        GestureDetector(
-          key: const Key('tripeaks_stock'),
-          onTap:
-              state.stock.isEmpty || state.paused || state.isWon || state.isLost
-              ? null
-              : _drawFromStock,
-          child: SizedBox(
-            width: metrics.cardWidth,
-            height: metrics.cardHeight,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                if (state.stock.isNotEmpty)
-                  for (
-                    int layer = 0;
-                    layer < math.min(3, state.stock.length);
-                    layer++
+  Widget _buildStockPile(_TriPeaksMetrics metrics) {
+    final stockKey = _isStockHinted
+        ? const ValueKey<String>('tripeaks_stock')
+        : const ValueKey<String>('tripeaks_stock_idle');
+    return GestureDetector(
+      key: const Key('tripeaks_stock'),
+      onTap: state.stock.isEmpty || state.paused || state.isWon || state.isLost
+          ? null
+          : _drawFromStock,
+      child: AnimatedContainer(
+        duration: kCardHighlightDuration,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(metrics.radius + 8),
+          boxShadow: _isStockHinted
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.45),
+                    blurRadius: 18,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : const [],
+        ),
+        child: SizedBox(
+          width: metrics.cardWidth + 6,
+          height: metrics.cardHeight + 6,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              if (state.stock.isNotEmpty)
+                for (
+                  int layer = 0;
+                  layer < math.min(3, state.stock.length);
+                  layer++
+                )
+                  Positioned(
+                    left: layer * 2,
+                    top: layer * 2,
+                    child: _buildCard(
+                      TriPeaksCard(
+                        card: PlayingCard(Suit.spades, CardValue.ace),
+                        faceUp: false,
+                      ),
+                      metrics,
+                      highlighted:
+                          _isStockHinted &&
+                          layer == math.min(3, state.stock.length) - 1,
+                      key: stockKey,
+                    ),
                   )
-                    Positioned(
-                      left: layer * 2,
-                      top: layer * 2,
-                      child: _buildCard(
-                        TriPeaksCard(
-                          card: PlayingCard(Suit.spades, CardValue.ace),
-                          faceUp: false,
-                        ),
-                        metrics,
-                      ),
-                    )
-                else
-                  _buildCard(null, metrics),
-                Positioned.fill(
-                  child: Align(
-                    alignment: Alignment.bottomRight,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        '${state.stock.length}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+              else
+                _buildCard(
+                  null,
+                  metrics,
+                  highlighted: _isStockHinted,
+                  key: stockKey,
+                ),
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  child: Container(
+                    key: const Key('tripeaks_stock_count'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${state.stock.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-        SizedBox(width: metrics.columnGap * 1.5),
-        _buildCard(state.wasteTop, metrics, key: const Key('tripeaks_waste')),
-        const Spacer(),
-      ],
+      ),
     );
   }
 
   Widget _buildTableau(_TriPeaksMetrics metrics) {
-    final orderedPositions = [...TriPeaksGameState.layout]
-      ..sort((a, b) {
-        final byRow = b.row.compareTo(a.row);
-        if (byRow != 0) {
-          return byRow;
-        }
-        return a.index.compareTo(b.index);
-      });
-
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: metrics.boardWidth,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: metrics.boardWidth,
-                  height: metrics.tableauHeight,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      for (final position in orderedPositions)
-                        Positioned(
-                          left: position.column * metrics.columnGap,
-                          top: position.row * metrics.rowStep,
-                          child: _buildCard(
-                            state.tableau[position.index],
-                            metrics,
-                            key: Key('tripeaks_tableau_${position.index}'),
-                            highlighted: false,
-                            onTap: state.isValidMove(position.index)
-                                ? () => _removeCard(position.index)
-                                : null,
-                          ),
-                        ),
-                    ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SizedBox(
+        width: metrics.boardWidth,
+        child: SizedBox(
+          width: metrics.boardWidth,
+          height: metrics.tableauHeight,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              for (final position in TriPeaksGameState.layout)
+                Positioned(
+                  left: position.column * metrics.columnGap,
+                  top: position.row * metrics.rowStep,
+                  child: _buildCard(
+                    state.tableau[position.index],
+                    metrics,
+                    key: ValueKey<String>('tripeaks_tableau_${position.index}'),
+                    highlighted: _isHintedTableauCard(position.index),
+                    onTap: state.isValidMove(position.index)
+                        ? () => _removeCard(position.index)
+                        : null,
                   ),
                 ),
-                SizedBox(height: metrics.sectionGap),
-                _buildStockAndWaste(metrics),
-              ],
-            ),
+            ],
           ),
         ),
       ),
@@ -703,55 +772,61 @@ class _TriPeaksGameState extends State<TriPeaksGame>
       ),
       bottomNavigationBar: GameBottomBar(
         onUndo: _history.isEmpty ? null : _undo,
-        onHint: null,
-        hintEnabled: false,
+        undoEnabled: _history.isNotEmpty,
+        onHint: _showHint,
+        hintEnabled: state.isActive,
         onNewDeal: _newGame,
         onStatistics: _showStatistics,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final metrics = _TriPeaksMetrics.fromWidth(
-                    constraints.maxWidth,
-                  );
-                  return Stack(
-                    children: [
-                      Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 1100,
+          : Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF1E6B43), Color(0xFF14532D)],
+                ),
+              ),
+              child: SafeArea(
+                minimum: const EdgeInsets.all(12),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final metrics = _TriPeaksMetrics.fromWidth(
+                      constraints.maxWidth,
+                    );
+                    return Stack(
+                      children: [
+                        SingleChildScrollView(
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 1100),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 8,
                                 ),
-                                child: _buildHeader(context),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _buildTopShelf(metrics),
+                                    const SizedBox(height: 12),
+                                    _buildStatsRow(),
+                                    const SizedBox(height: 24),
+                                    _buildTableau(metrics),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 1100,
-                                  ),
-                                  child: _buildTableau(metrics),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (state.paused || state.isWon || state.isLost)
-                        _buildOverlay(metrics),
-                    ],
-                  );
-                },
+                        ),
+                        if (state.paused || state.isWon || state.isLost)
+                          _buildOverlay(metrics),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
     );
@@ -814,7 +889,7 @@ class _TriPeaksMetrics {
       radius: math.max(6, cardWidth * 0.1),
       columnGap: columnGap,
       rowStep: rowStep,
-      sectionGap: 20,
+      sectionGap: cardHeight * 0.24,
       boardWidth: (10 * columnGap) + cardWidth,
       tableauHeight: (3 * rowStep) + cardHeight,
     );

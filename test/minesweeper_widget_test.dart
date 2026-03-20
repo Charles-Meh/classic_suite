@@ -12,6 +12,30 @@ Widget _buildHarness({MinesweeperGameState? state}) {
   );
 }
 
+MinesweeperGameState _buildLostState() {
+  final config = MinesweeperConfig.easy();
+  final board = List<List<MinesweeperCell>>.generate(
+    config.rows,
+    (_) => List<MinesweeperCell>.generate(
+      config.columns,
+      (_) => const MinesweeperCell(),
+    ),
+  );
+  board[0][0] = const MinesweeperCell(
+    hasMine: true,
+    revealed: true,
+    exploded: true,
+  );
+
+  return MinesweeperGameState.debug(
+    config: config,
+    board: board,
+    status: MinesweeperGameStatus.lost,
+    message: 'Boom. Tap restart and try again.',
+    elapsedSeconds: 14,
+  );
+}
+
 Future<void> _pumpMinesweeper(
   WidgetTester tester, {
   MinesweeperGameState? state,
@@ -47,8 +71,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MinesweeperGame), findsOneWidget);
-    expect(find.byKey(const Key('minesweeper_board_label')), findsOneWidget);
+    expect(find.byKey(const Key('minesweeper_board_label')), findsNothing);
+    expect(
+      find.byKey(const Key('minesweeper_difficulty_button')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('minesweeper_flag_mode')), findsOneWidget);
+    expect(find.textContaining('Clear every safe tile'), findsNothing);
     expect(find.text('New Board'), findsOneWidget);
   });
 
@@ -99,5 +128,47 @@ void main() {
 
     expect(find.byIcon(Icons.flag), findsOneWidget);
     expect(find.text('00:33'), findsOneWidget);
+  });
+
+  testWidgets('difficulty button starts a new board for another preset', (
+    WidgetTester tester,
+  ) async {
+    await _pumpMinesweeper(tester);
+
+    await tester.tap(find.byKey(const Key('minesweeper_difficulty_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('minesweeper_difficulty_medium')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('minesweeper_cell_15_15')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('minesweeper_difficulty_button')),
+        matching: find.text('Medium'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('loss overlay can start a new board', (
+    WidgetTester tester,
+  ) async {
+    await _pumpMinesweeper(tester, state: _buildLostState());
+
+    expect(find.text('Boom'), findsOneWidget);
+    expect(
+      find.byKey(const Key('minesweeper_overlay_new_board')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('minesweeper_overlay_new_board')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Boom'), findsNothing);
+    expect(
+      find.byKey(const Key('minesweeper_overlay_new_board')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('minesweeper_cell_0_0')), findsOneWidget);
   });
 }

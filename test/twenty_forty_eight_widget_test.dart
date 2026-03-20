@@ -93,8 +93,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('4'), findsWidgets);
+    expect(find.byTooltip('Undo'), findsOneWidget);
+    expect(find.byKey(const Key('2048_pause')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('2048_undo')));
+    await tester.tap(find.byTooltip('Undo'));
     await tester.pumpAndSettle();
 
     expect(find.text('Move undone.'), findsOneWidget);
@@ -102,20 +104,18 @@ void main() {
     expect(find.textContaining('Score 0'), findsOneWidget);
   });
 
-  testWidgets('pause overlay can resume play', (tester) async {
+  testWidgets('app bar keeps help and disabled settings only', (tester) async {
     await tester.pumpWidget(_buildHarness());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('2048_pause')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Paused'), findsOneWidget);
-    expect(find.text('Resume'), findsWidgets);
-
-    await tester.tap(find.text('Resume').first);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Paused'), findsNothing);
+    expect(find.byTooltip('Help'), findsOneWidget);
+    expect(find.byTooltip('Settings'), findsOneWidget);
+    expect(find.byTooltip('Game menu'), findsNothing);
+    expect(find.byKey(const Key('2048_pause')), findsNothing);
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('2048_settings_action'))),
+      isA<IconButton>().having((button) => button.onPressed, 'onPressed', null),
+    );
   });
 
   testWidgets('won board offers keep going and statistics dialog', (
@@ -142,16 +142,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('2048_continue')), findsNothing);
 
-    await tester.tap(find.byTooltip('Game menu').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Statistics'));
+    await tester.tap(find.byTooltip('Statistics'));
     await tester.pumpAndSettle();
 
     expect(find.text('2048 statistics'), findsOneWidget);
     expect(find.text('Best score'), findsOneWidget);
   });
 
-  testWidgets('restart resets the board quickly', (tester) async {
+  testWidgets('new game resets the board quickly', (tester) async {
     final state = TwentyFortyEightGameState.debug(
       tiles: _boardFromValues([
         [128, 64, 32, 16],
@@ -166,7 +164,7 @@ void main() {
     await tester.pumpWidget(_buildHarness(state: state));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('2048_restart')));
+    await tester.tap(find.text('New Game'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Score 0'), findsOneWidget);

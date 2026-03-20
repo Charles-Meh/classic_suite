@@ -1,5 +1,7 @@
 import 'package:classic_suite/games/sudoku/sudoku_game.dart';
 import 'package:classic_suite/games/sudoku/sudoku_game_state.dart';
+import 'package:classic_suite/games/sudoku/sudoku_stats.dart';
+import 'package:classic_suite/games/sudoku/sudoku_stats_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +13,11 @@ Widget _buildSudokuHarness({SudokuGameState? state}) {
   );
 }
 
+Future<void> _settleSudoku(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
 Future<void> _pumpSudoku(
   WidgetTester tester, {
   SudokuGameState? state,
@@ -19,7 +26,7 @@ Future<void> _pumpSudoku(
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(_buildSudokuHarness(state: state));
-  await tester.pumpAndSettle();
+  await _settleSudoku(tester);
 }
 
 void main() {
@@ -39,8 +46,11 @@ void main() {
     expect(find.text('New Game'), findsOneWidget);
     expect(find.byTooltip('Settings'), findsOneWidget);
     expect(find.byTooltip('Help'), findsOneWidget);
-    expect(find.text('Starter puzzle'), findsNothing);
-    expect(find.text('All notes'), findsNothing);
+    expect(find.byKey(const Key('sudoku_status_message')), findsNothing);
+    expect(find.text('Filled'), findsNothing);
+    expect(find.text('00:00'), findsOneWidget);
+    expect(find.text('All notes'), findsOneWidget);
+    expect(find.text('Notes'), findsOneWidget);
     expect(find.text('Save'), findsNothing);
     expect(find.text('Load'), findsNothing);
   });
@@ -69,6 +79,59 @@ void main() {
 
     await _pumpSudoku(tester, state: solved);
 
-    expect(find.text('Solved. Nicely done.'), findsOneWidget);
+    expect(find.text('Grid Complete!'), findsOneWidget);
+  });
+
+  testWidgets('notes mode restores pencil marks on the board', (
+    WidgetTester tester,
+  ) async {
+    await _pumpSudoku(tester);
+
+    await tester.tap(find.byKey(const Key('sudoku_cell_0_2')));
+    await _settleSudoku(tester);
+
+    await tester.tap(find.byKey(const Key('sudoku_notes_mode')));
+    await _settleSudoku(tester);
+
+    await tester.tap(find.byKey(const Key('sudoku_digit_1')));
+    await tester.tap(find.byKey(const Key('sudoku_digit_2')));
+    await _settleSudoku(tester);
+
+    final cell = find.byKey(const Key('sudoku_cell_0_2'));
+    expect(find.descendant(of: cell, matching: find.text('1')), findsOneWidget);
+    expect(find.descendant(of: cell, matching: find.text('2')), findsOneWidget);
+  });
+
+  testWidgets('statistics show current timer and best times per difficulty', (
+    WidgetTester tester,
+  ) async {
+    await SudokuStatsStore().save(
+      const SudokuStats(
+        bestEasyTimeSeconds: 65,
+        bestMediumTimeSeconds: 125,
+        bestHardTimeSeconds: 245,
+      ),
+    );
+
+    final state = SudokuGameState()..elapsedSeconds = 83;
+    await _pumpSudoku(tester, state: state);
+
+    await tester.tap(find.byTooltip('Statistics'));
+    await _settleSudoku(tester);
+
+    expect(find.text('Current time'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('01:23'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Best easy'), findsOneWidget);
+    expect(find.text('01:05'), findsOneWidget);
+    expect(find.text('Best medium'), findsOneWidget);
+    expect(find.text('02:05'), findsOneWidget);
+    expect(find.text('Best hard'), findsOneWidget);
+    expect(find.text('04:05'), findsOneWidget);
   });
 }

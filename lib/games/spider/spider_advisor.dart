@@ -147,6 +147,16 @@ class SpiderAdvisor {
       score += 220;
     }
 
+    if (_isEquivalentOrWorseSupportMove(
+      sourcePile: sourcePile,
+      sourceCardIndex: suggestion.sourceCardIndex!,
+      targetPile: targetPile,
+      movedCard: firstMovedCard,
+      revealsHidden: revealsHidden,
+    )) {
+      return -1;
+    }
+
     if (suggestion.cards.length > 1) {
       score += 35;
     }
@@ -165,6 +175,31 @@ class SpiderAdvisor {
     }
 
     return score;
+  }
+
+  static bool _isEquivalentOrWorseSupportMove({
+    required List<KlondikeCard> sourcePile,
+    required int sourceCardIndex,
+    required List<KlondikeCard> targetPile,
+    required KlondikeCard movedCard,
+    required bool revealsHidden,
+  }) {
+    if (revealsHidden || sourceCardIndex == 0 || targetPile.isEmpty) {
+      return false;
+    }
+
+    final sourceSupport = sourcePile[sourceCardIndex - 1];
+    final targetSupport = targetPile.last;
+    if (sourceSupport.valueIndex != targetSupport.valueIndex) {
+      return false;
+    }
+
+    return _supportQuality(targetSupport, movedCard) <=
+        _supportQuality(sourceSupport, movedCard);
+  }
+
+  static int _supportQuality(KlondikeCard supportCard, KlondikeCard movedCard) {
+    return supportCard.card.suit == movedCard.card.suit ? 1 : 0;
   }
 
   static String _runLabel(List<KlondikeCard> cards) {
