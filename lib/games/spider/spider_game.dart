@@ -145,6 +145,8 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
           suggestion.cards,
           state.tableau[targetPileIndex],
         );
+      case SpiderSuggestionKind.useEmptyTableau:
+        return false;
       case SpiderSuggestionKind.dealFromStock:
         return state.dealFromStock();
       case SpiderSuggestionKind.noMoves:
@@ -648,6 +650,7 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
     _SpiderLayoutMetrics metrics, {
     String? label,
     _HintRole role = _HintRole.none,
+    Key? key,
   }) {
     final borderColor = role == _HintRole.source
         ? const Color(0xFFFFD971)
@@ -662,6 +665,7 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
     final decoration = _hintDecoration(role);
 
     return _buildHintFrame(
+      key: key,
       role: role,
       borderRadius: BorderRadius.circular(metrics.cornerRadius),
       child: Container(
@@ -812,6 +816,9 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
                       metrics,
                       label: 'Any',
                       role: hintRole,
+                      key: hintRole == _HintRole.target
+                          ? Key('spider_tableau_${pileIndex}_empty_hint')
+                          : null,
                     ),
                   )
                 : Stack(
@@ -954,7 +961,11 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
 
   _HintRole _tableauHintRole(int pileIndex) {
     final hint = _activeHint;
-    if (hint == null || hint.kind != SpiderSuggestionKind.moveRun) {
+    if (hint == null) {
+      return _HintRole.none;
+    }
+    if (hint.kind != SpiderSuggestionKind.moveRun &&
+        hint.kind != SpiderSuggestionKind.useEmptyTableau) {
       return _HintRole.none;
     }
     return hint.targetPileIndex == pileIndex

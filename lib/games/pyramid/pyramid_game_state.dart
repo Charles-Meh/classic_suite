@@ -394,14 +394,6 @@ class PyramidGameState {
     return first.value + second.value == 13;
   }
 
-  bool isMatchCandidate(PyramidCardRef ref) {
-    final selected = selectedCard;
-    if (selected == null || selected == ref) {
-      return false;
-    }
-    return canPair(selected, ref);
-  }
-
   PyramidGameState tapCard(PyramidCardRef ref) {
     if (paused || isWon || !isPlayableRef(ref)) {
       return this;

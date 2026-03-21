@@ -17,6 +17,9 @@ class HeartsAi {
 
   static HeartsCard chooseCard(HeartsGameState state, int player) {
     final legal = state.legalPlaysFor(player);
+    if (legal.isEmpty) {
+      return state.hands[player].first;
+    }
     final shootMoon = _shouldShootMoon(state, player);
     if (legal.length == 1) {
       return legal.single;

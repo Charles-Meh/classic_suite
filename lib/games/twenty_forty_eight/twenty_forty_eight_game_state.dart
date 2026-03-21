@@ -86,7 +86,6 @@ class TwentyFortyEightSnapshot {
     required this.hasWon,
     required this.keepGoing,
     required this.status,
-    required this.message,
     required this.nextTileId,
     required this.startedAt,
     required this.elapsedSeconds,
@@ -98,7 +97,6 @@ class TwentyFortyEightSnapshot {
   final bool hasWon;
   final bool keepGoing;
   final TwentyFortyEightStatus status;
-  final String message;
   final int nextTileId;
   final DateTime? startedAt;
   final int elapsedSeconds;
@@ -110,7 +108,6 @@ class TwentyFortyEightSnapshot {
     'hasWon': hasWon,
     'keepGoing': keepGoing,
     'status': status.name,
-    'message': message,
     'nextTileId': nextTileId,
     'startedAt': startedAt?.toIso8601String(),
     'elapsedSeconds': elapsedSeconds,
@@ -132,7 +129,6 @@ class TwentyFortyEightSnapshot {
         (value) => value.name == (json['status'] as String? ?? 'ready'),
         orElse: () => TwentyFortyEightStatus.ready,
       ),
-      message: json['message'] as String? ?? 'Swipe to begin.',
       nextTileId: (json['nextTileId'] as num?)?.toInt() ?? 3,
       startedAt: json['startedAt'] == null
           ? null
@@ -164,7 +160,6 @@ class TwentyFortyEightGameState {
     required this.hasWon,
     required this.keepGoing,
     required this.status,
-    required this.message,
     required this.undoStack,
     required this.nextTileId,
     required this.startedAt,
@@ -180,7 +175,6 @@ class TwentyFortyEightGameState {
   final bool hasWon;
   final bool keepGoing;
   final TwentyFortyEightStatus status;
-  final String message;
   final List<TwentyFortyEightSnapshot> undoStack;
   final int nextTileId;
   final DateTime? startedAt;
@@ -199,7 +193,6 @@ class TwentyFortyEightGameState {
       hasWon: false,
       keepGoing: false,
       status: TwentyFortyEightStatus.ready,
-      message: 'Swipe anywhere to begin.',
       undoStack: const [],
       nextTileId: second.nextTileId,
       startedAt: null,
@@ -214,7 +207,6 @@ class TwentyFortyEightGameState {
     bool hasWon = false,
     bool keepGoing = false,
     TwentyFortyEightStatus status = TwentyFortyEightStatus.playing,
-    String message = 'Debug state',
     List<TwentyFortyEightSnapshot> undoStack = const [],
     int? nextTileId,
     DateTime? startedAt,
@@ -227,7 +219,6 @@ class TwentyFortyEightGameState {
       hasWon: hasWon,
       keepGoing: keepGoing,
       status: status,
-      message: message,
       undoStack: List<TwentyFortyEightSnapshot>.from(undoStack),
       nextTileId:
           nextTileId ??
@@ -257,7 +248,6 @@ class TwentyFortyEightGameState {
         (value) => value.name == (json['status'] as String? ?? 'ready'),
         orElse: () => TwentyFortyEightStatus.ready,
       ),
-      message: json['message'] as String? ?? 'Swipe anywhere to begin.',
       undoStack: (json['undoStack'] as List<dynamic>? ?? const [])
           .map(
             (entry) => TwentyFortyEightSnapshot.fromJson(
@@ -293,7 +283,6 @@ class TwentyFortyEightGameState {
     'hasWon': hasWon,
     'keepGoing': keepGoing,
     'status': status.name,
-    'message': message,
     'undoStack': undoStack.map((snapshot) => snapshot.toJson()).toList(),
     'nextTileId': nextTileId,
     'startedAt': startedAt?.toIso8601String(),
@@ -350,7 +339,6 @@ class TwentyFortyEightGameState {
       hasWon: hasWon,
       keepGoing: keepGoing,
       status: status,
-      message: message,
       nextTileId: nextTileId,
       startedAt: startedAt,
       elapsedSeconds: elapsedSeconds,
@@ -359,7 +347,7 @@ class TwentyFortyEightGameState {
 
   TwentyFortyEightGameState undo() {
     if (!canUndo) {
-      return copyWith(message: 'Nothing to undo.');
+      return this;
     }
     final snapshot = undoStack.last;
     return TwentyFortyEightGameState._(
@@ -371,7 +359,6 @@ class TwentyFortyEightGameState {
       status: snapshot.status == TwentyFortyEightStatus.paused
           ? TwentyFortyEightStatus.playing
           : snapshot.status,
-      message: 'Move undone.',
       undoStack: undoStack.sublist(0, undoStack.length - 1),
       nextTileId: snapshot.nextTileId,
       startedAt: snapshot.startedAt,
@@ -386,7 +373,6 @@ class TwentyFortyEightGameState {
     bool? hasWon,
     bool? keepGoing,
     TwentyFortyEightStatus? status,
-    String? message,
     List<TwentyFortyEightSnapshot>? undoStack,
     int? nextTileId,
     DateTime? startedAt,
@@ -400,7 +386,6 @@ class TwentyFortyEightGameState {
       hasWon: hasWon ?? this.hasWon,
       keepGoing: keepGoing ?? this.keepGoing,
       status: status ?? this.status,
-      message: message ?? this.message,
       undoStack: undoStack ?? this.undoStack,
       nextTileId: nextTileId ?? this.nextTileId,
       startedAt: clearStartedAt ? null : startedAt ?? this.startedAt,
@@ -432,7 +417,7 @@ class TwentyFortyEightGameState {
     if (isPaused || isGameOver) {
       return this;
     }
-    return copyWith(status: TwentyFortyEightStatus.paused, message: 'Paused.');
+    return copyWith(status: TwentyFortyEightStatus.paused);
   }
 
   TwentyFortyEightGameState resume() {
@@ -443,7 +428,6 @@ class TwentyFortyEightGameState {
       status: canMove
           ? TwentyFortyEightStatus.playing
           : TwentyFortyEightStatus.lost,
-      message: canMove ? 'Back in it.' : 'No moves left. Game over.',
     );
   }
 
@@ -456,7 +440,6 @@ class TwentyFortyEightGameState {
       status: canMove
           ? TwentyFortyEightStatus.playing
           : TwentyFortyEightStatus.lost,
-      message: 'Keep going.',
     );
   }
 
@@ -521,10 +504,7 @@ class TwentyFortyEightGameState {
     }
 
     if (!changed) {
-      return TwentyFortyEightMoveResult(
-        state: copyWith(message: 'No move there.'),
-        changed: false,
-      );
+      return TwentyFortyEightMoveResult(state: this, changed: false);
     }
 
     final random = seed == null ? Random() : Random(seed);
@@ -544,13 +524,6 @@ class TwentyFortyEightGameState {
         : wonNow && !keepGoing
         ? TwentyFortyEightStatus.won
         : TwentyFortyEightStatus.playing;
-    final nextMessage = lostNow
-        ? 'No moves left.'
-        : wonNow && !keepGoing && !hasWon
-        ? '2048 reached. You can keep going.'
-        : spawned.spawnedTile.value == 4
-        ? 'Nice. A 4 dropped in.'
-        : 'Keep building.';
 
     final nextState = TwentyFortyEightGameState._(
       tiles: spawned.tiles,
@@ -559,7 +532,6 @@ class TwentyFortyEightGameState {
       hasWon: wonNow,
       keepGoing: keepGoing,
       status: nextStatus,
-      message: nextMessage,
       undoStack: [...undoStack, _snapshot()],
       nextTileId: spawned.nextTileId,
       startedAt: startedAt ?? DateTime.now(),

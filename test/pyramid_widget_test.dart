@@ -1,5 +1,6 @@
 import 'package:classic_suite/games/pyramid/pyramid_game.dart';
 import 'package:classic_suite/games/pyramid/pyramid_game_state.dart';
+import 'package:classic_suite/shared/classic_game_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -57,6 +58,25 @@ PyramidGameState _buildPairReadyState() {
   );
 }
 
+PyramidGameState _buildHintReadyState() {
+  return _buildPairReadyState().copyWith(
+    stock: [
+      _card(PyramidSuit.hearts, PyramidRank.ace),
+      _card(PyramidSuit.clubs, PyramidRank.two),
+      _card(PyramidSuit.spades, PyramidRank.three),
+    ],
+  );
+}
+
+ClassicPlayingCard _cardWidget(WidgetTester tester, Key key) {
+  return tester.widget<ClassicPlayingCard>(
+    find.descendant(
+      of: find.byKey(key),
+      matching: find.byType(ClassicPlayingCard),
+    ),
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -71,6 +91,7 @@ void main() {
       elapsedSeconds: 33,
       selectedCard: const PyramidCardRef.waste(0),
       paused: true,
+      cycleCount: 2,
     );
     SharedPreferences.setMockInitialValues({
       PyramidGameState.storageKey: saved.encode(),
@@ -85,12 +106,16 @@ void main() {
     expect(find.byKey(const Key('pyramid_settings_action')), findsOneWidget);
     expect(find.byKey(const Key('pyramid_pause_overlay')), findsNothing);
     expect(find.byKey(const Key('pyramid_pause')), findsNothing);
+    expect(find.byKey(const Key('pyramid_status_message')), findsNothing);
+    expect(find.text('Cycles'), findsNothing);
     expect(find.text('Waste'), findsNothing);
+    expect(find.text('Stock'), findsNothing);
     expect(find.text('Pyramid Solitaire'), findsOneWidget);
     expect(find.byTooltip('Undo'), findsOneWidget);
     expect(find.byTooltip('Hint'), findsOneWidget);
     expect(find.byTooltip('Statistics'), findsOneWidget);
     expect(find.byKey(const Key('pyramid_waste_card')), findsOneWidget);
+    expect(find.byKey(const Key('pyramid_stock_count')), findsOneWidget);
   });
 
   testWidgets('settings action opens pyramid settings dialog', (tester) async {
@@ -108,5 +133,63 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('pyramid_new_deal_action')), findsOneWidget);
+  });
+
+  testWidgets('selecting a card does not auto-highlight its matching partner', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: PyramidGame(initialState: _buildPairReadyState())),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('pyramid_waste_card')));
+    await tester.pump();
+
+    final pyramidCard = _cardWidget(tester, const Key('pyramid_card_0_0'));
+    final wasteCard = _cardWidget(tester, const Key('pyramid_waste_card'));
+
+    expect(pyramidCard.highlightColor, isNull);
+    expect(wasteCard.highlightColor, isNotNull);
+  });
+
+  testWidgets('removed pyramid cards do not leave visible placeholders', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: PyramidGame(initialState: _buildPairReadyState())),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ClassicCardPlaceholder), findsNothing);
+    expect(find.byKey(const Key('pyramid_card_0_0')), findsOneWidget);
+    expect(find.byKey(const Key('pyramid_waste_card')), findsOneWidget);
+  });
+
+  testWidgets('hint highlights one card without drawing from stock', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: PyramidGame(initialState: _buildHintReadyState())),
+    );
+    await tester.pumpAndSettle();
+
+    final stockCountBefore = tester.widget<Text>(
+      find.byKey(const Key('pyramid_stock_count')),
+    );
+    expect(stockCountBefore.data, '3');
+
+    await tester.tap(find.byTooltip('Hint'));
+    await tester.pump();
+
+    final stockCountAfter = tester.widget<Text>(
+      find.byKey(const Key('pyramid_stock_count')),
+    );
+    final pyramidCard = _cardWidget(tester, const Key('pyramid_card_0_0'));
+    final wasteCard = _cardWidget(tester, const Key('pyramid_waste_card'));
+
+    expect(stockCountAfter.data, '3');
+    expect(pyramidCard.highlightColor, isNotNull);
+    expect(wasteCard.highlightColor, isNull);
   });
 }

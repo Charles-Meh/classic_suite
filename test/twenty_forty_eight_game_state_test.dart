@@ -132,7 +132,6 @@ void main() {
           hasWon: false,
           keepGoing: false,
           status: TwentyFortyEightStatus.ready,
-          message: 'Swipe anywhere to begin.',
           nextTileId: 2,
           startedAt: null,
           elapsedSeconds: 0,

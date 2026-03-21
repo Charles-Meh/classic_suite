@@ -500,14 +500,20 @@ class _FreeCellGameState extends State<FreeCellGame> {
   Widget _buildCardFace(
     KlondikeCard card,
     _FreeCellLayoutMetrics metrics, {
+    double? width,
+    double? height,
+    double? cornerRadius,
     bool highlighted = false,
   }) {
+    final effectiveWidth = width ?? metrics.cardWidth;
+    final effectiveHeight = height ?? metrics.cardHeight;
+    final effectiveCornerRadius = cornerRadius ?? metrics.cornerRadius;
     return AnimatedContainer(
       duration: _animationSpeed.duration,
       curve: Curves.easeOutCubic,
       padding: highlighted ? const EdgeInsets.all(2) : EdgeInsets.zero,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(metrics.cornerRadius + 3),
+        borderRadius: BorderRadius.circular(effectiveCornerRadius + 3),
         color: highlighted ? const Color(0x22F6C453) : null,
         border: highlighted
             ? Border.all(color: Colors.amber.shade300, width: 2)
@@ -515,9 +521,9 @@ class _FreeCellGameState extends State<FreeCellGame> {
       ),
       child: ClassicPlayingCard(
         card: card.card,
-        width: metrics.cardWidth,
-        height: metrics.cardHeight,
-        cornerRadius: metrics.cornerRadius,
+        width: effectiveWidth,
+        height: effectiveHeight,
+        cornerRadius: effectiveCornerRadius,
       ),
     );
   }
@@ -525,13 +531,20 @@ class _FreeCellGameState extends State<FreeCellGame> {
   Widget _buildPlaceholder(
     _FreeCellLayoutMetrics metrics, {
     String? label,
+    double? width,
+    double? height,
+    double? cornerRadius,
     bool active = false,
     bool highlighted = false,
   }) {
+    final effectiveWidth = width ?? metrics.cardWidth;
+    final effectiveHeight = height ?? metrics.cardHeight;
+    final effectiveCornerRadius = cornerRadius ?? metrics.cornerRadius;
+    final labelScale = effectiveWidth / metrics.cardWidth;
     return AnimatedContainer(
       duration: _animationSpeed.duration,
-      width: metrics.cardWidth,
-      height: metrics.cardHeight,
+      width: effectiveWidth,
+      height: effectiveHeight,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: highlighted
@@ -539,7 +552,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
             : active
             ? Colors.white.withValues(alpha: 0.18)
             : Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(metrics.cornerRadius),
+        borderRadius: BorderRadius.circular(effectiveCornerRadius),
         border: Border.all(
           color: highlighted
               ? const Color(0xFF8DD9FF)
@@ -556,8 +569,8 @@ class _FreeCellGameState extends State<FreeCellGame> {
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.82),
                 fontWeight: FontWeight.w700,
-                fontSize: metrics.cardWidth * 0.28,
-                letterSpacing: 1,
+                fontSize: effectiveWidth * 0.28,
+                letterSpacing: labelScale < 0.9 ? 0.4 : 1,
               ),
             ),
     );
@@ -570,12 +583,15 @@ class _FreeCellGameState extends State<FreeCellGame> {
         final active = candidate.isNotEmpty;
         final highlighted = _isHintTargetFreecell(index);
         return SizedBox(
-          width: metrics.cardWidth,
-          height: metrics.cardHeight,
+          width: metrics.topSlotWidth,
+          height: metrics.topSlotHeight,
           child: card == null
               ? _buildPlaceholder(
                   metrics,
                   label: 'FC',
+                  width: metrics.topSlotWidth,
+                  height: metrics.topSlotHeight,
+                  cornerRadius: metrics.topSlotCornerRadius,
                   active: active,
                   highlighted: highlighted,
                 )
@@ -608,7 +624,13 @@ class _FreeCellGameState extends State<FreeCellGame> {
       data: _FreeCellDragData([card]),
       feedback: Material(
         color: Colors.transparent,
-        child: _buildCardFace(card, metrics),
+        child: _buildCardFace(
+          card,
+          metrics,
+          width: metrics.topSlotWidth,
+          height: metrics.topSlotHeight,
+          cornerRadius: metrics.topSlotCornerRadius,
+        ),
       ),
       onDragStarted: () => _setActiveDrag(
         const _ActiveFreeCellDrag(
@@ -621,13 +643,22 @@ class _FreeCellGameState extends State<FreeCellGame> {
       onDragEnd: (_) => _clearActiveDrag(),
       onDraggableCanceled: (velocity, offset) => _clearActiveDrag(),
       onDragCompleted: _clearActiveDrag,
-      childWhenDragging: _buildPlaceholder(metrics, label: 'FC'),
+      childWhenDragging: _buildPlaceholder(
+        metrics,
+        label: 'FC',
+        width: metrics.topSlotWidth,
+        height: metrics.topSlotHeight,
+        cornerRadius: metrics.topSlotCornerRadius,
+      ),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _handleTap([card]),
         child: _buildCardFace(
           card,
           metrics,
+          width: metrics.topSlotWidth,
+          height: metrics.topSlotHeight,
+          cornerRadius: metrics.topSlotCornerRadius,
           highlighted: _isHintSourceFreecell(freecellIndex),
         ),
       ),
@@ -640,12 +671,15 @@ class _FreeCellGameState extends State<FreeCellGame> {
       builder: (context, candidate, rejected) {
         final active = candidate.isNotEmpty;
         return SizedBox(
-          width: metrics.cardWidth,
-          height: metrics.cardHeight,
+          width: metrics.topSlotWidth,
+          height: metrics.topSlotHeight,
           child: pile.isEmpty
               ? _buildPlaceholder(
                   metrics,
                   label: _foundationLabel(index),
+                  width: metrics.topSlotWidth,
+                  height: metrics.topSlotHeight,
+                  cornerRadius: metrics.topSlotCornerRadius,
                   active: active,
                 )
               : _buildFoundationDraggable(pile.last, index, metrics),
@@ -671,7 +705,13 @@ class _FreeCellGameState extends State<FreeCellGame> {
       data: _FreeCellDragData([card]),
       feedback: Material(
         color: Colors.transparent,
-        child: _buildCardFace(card, metrics),
+        child: _buildCardFace(
+          card,
+          metrics,
+          width: metrics.topSlotWidth,
+          height: metrics.topSlotHeight,
+          cornerRadius: metrics.topSlotCornerRadius,
+        ),
       ),
       onDragStarted: () => _setActiveDrag(
         const _ActiveFreeCellDrag(
@@ -687,6 +727,9 @@ class _FreeCellGameState extends State<FreeCellGame> {
       childWhenDragging: _buildPlaceholder(
         metrics,
         label: _foundationLabel(foundationIndex),
+        width: metrics.topSlotWidth,
+        height: metrics.topSlotHeight,
+        cornerRadius: metrics.topSlotCornerRadius,
       ),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -694,6 +737,9 @@ class _FreeCellGameState extends State<FreeCellGame> {
         child: _buildCardFace(
           card,
           metrics,
+          width: metrics.topSlotWidth,
+          height: metrics.topSlotHeight,
+          cornerRadius: metrics.topSlotCornerRadius,
           highlighted:
               _isHintSourceFoundation(foundationIndex) ||
               _isHintTargetFoundation(foundationIndex),
@@ -887,7 +933,7 @@ class _FreeCellGameState extends State<FreeCellGame> {
   }
 
   String _foundationLabel(int index) {
-    const labels = ['C', 'D', 'H', 'S'];
+    const labels = ['♣', '♦', '♥', '♠'];
     return labels[index];
   }
 
@@ -993,10 +1039,6 @@ class _FreeCellGameState extends State<FreeCellGame> {
                 constraints.maxWidth,
               );
               final cascadeHeight = _cascadeRegionHeight(metrics);
-              final topShelfWidth = metrics.topShelfWidth(
-                freecellCount: state.freecells.length,
-                foundationCount: state.foundations.length,
-              );
               final cascadeBoardWidth = metrics.cascadeBoardWidth(
                 state.cascades.length,
               );
@@ -1007,47 +1049,41 @@ class _FreeCellGameState extends State<FreeCellGame> {
                     children: [
                       Align(
                         alignment: Alignment.topCenter,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: SizedBox(
-                            width: math.max(
-                              constraints.maxWidth,
-                              topShelfWidth,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    for (
-                                      int i = 0;
-                                      i < state.freecells.length;
-                                      i++
-                                    ) ...[
-                                      if (i > 0)
-                                        SizedBox(width: metrics.groupSpacing),
-                                      _buildFreecellSlot(i, metrics),
-                                    ],
+                        child: SizedBox(
+                          width: constraints.maxWidth,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  for (
+                                    int i = 0;
+                                    i < state.freecells.length;
+                                    i++
+                                  ) ...[
+                                    if (i > 0)
+                                      SizedBox(width: metrics.topSlotSpacing),
+                                    _buildFreecellSlot(i, metrics),
                                   ],
-                                ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    for (
-                                      int i = 0;
-                                      i < state.foundations.length;
-                                      i++
-                                    ) ...[
-                                      if (i > 0)
-                                        SizedBox(width: metrics.groupSpacing),
-                                      _buildFoundationSlot(i, metrics),
-                                    ],
+                                ],
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  for (
+                                    int i = 0;
+                                    i < state.foundations.length;
+                                    i++
+                                  ) ...[
+                                    if (i > 0)
+                                      SizedBox(width: metrics.topSlotSpacing),
+                                    _buildFoundationSlot(i, metrics),
                                   ],
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -1159,6 +1195,10 @@ class _FreeCellLayoutMetrics {
     required this.cardWidth,
     required this.cardHeight,
     required this.cornerRadius,
+    required this.topSlotWidth,
+    required this.topSlotHeight,
+    required this.topSlotCornerRadius,
+    required this.topSlotSpacing,
     required this.groupSpacing,
     required this.cascadeSpacing,
     required this.sectionSpacing,
@@ -1168,25 +1208,20 @@ class _FreeCellLayoutMetrics {
   final double cardWidth;
   final double cardHeight;
   final double cornerRadius;
+  final double topSlotWidth;
+  final double topSlotHeight;
+  final double topSlotCornerRadius;
+  final double topSlotSpacing;
   final double groupSpacing;
   final double cascadeSpacing;
   final double sectionSpacing;
   final double cascadeOverlap;
 
-  double slotRowWidth(int slotCount) {
+  double topSlotRowWidth(int slotCount) {
     if (slotCount <= 0) {
       return 0;
     }
-    return (cardWidth * slotCount) + (groupSpacing * (slotCount - 1));
-  }
-
-  double topShelfWidth({
-    required int freecellCount,
-    required int foundationCount,
-  }) {
-    return slotRowWidth(freecellCount) +
-        slotRowWidth(foundationCount) +
-        (groupSpacing * 2);
+    return (topSlotWidth * slotCount) + (topSlotSpacing * (slotCount - 1));
   }
 
   double cascadeBoardWidth(int cascadeCount) {
@@ -1202,14 +1237,30 @@ class _FreeCellLayoutMetrics {
         : width < 900
         ? 6.0
         : 10.0;
-    final groupSpacing = width < 480 ? 6.0 : 10.0;
+    final topSlotSpacing = width < 360
+        ? 3.0
+        : width < 480
+        ? 4.0
+        : 6.0;
+    final groupSpacing = width < 360
+        ? 4.0
+        : width < 480
+        ? 6.0
+        : 10.0;
     final available = width - (cascadeSpacing * 7);
     final cardWidth = (available / 8).clamp(54.0, 98.0);
     final cardHeight = cardWidth * 1.42;
+    final topAvailable = width - groupSpacing - (topSlotSpacing * 6);
+    final topSlotWidth = (topAvailable / 8).clamp(30.0, cardWidth);
+    final topSlotHeight = topSlotWidth * 1.42;
     return _FreeCellLayoutMetrics(
       cardWidth: cardWidth,
       cardHeight: cardHeight,
       cornerRadius: math.max(6, cardWidth * 0.08),
+      topSlotWidth: topSlotWidth,
+      topSlotHeight: topSlotHeight,
+      topSlotCornerRadius: math.max(5, topSlotWidth * 0.08),
+      topSlotSpacing: topSlotSpacing,
       groupSpacing: groupSpacing,
       cascadeSpacing: cascadeSpacing,
       sectionSpacing: width < 480 ? 16.0 : 22.0,

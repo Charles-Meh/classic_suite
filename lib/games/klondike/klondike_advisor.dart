@@ -271,6 +271,13 @@ class KlondikeAdvisor {
     required int targetPileIndex,
     required List<KlondikeCard> cards,
   }) {
+    final targetPile = state.tableau[targetPileIndex];
+    if (targetPile.isEmpty &&
+        cards.length == 1 &&
+        cards.first.card.value == CardValue.king) {
+      return true;
+    }
+
     if (source.zone != KlondikeLocationZone.tableau || source.cardIndex == 0) {
       return false;
     }
@@ -289,7 +296,6 @@ class KlondikeAdvisor {
       return false;
     }
 
-    final targetPile = state.tableau[targetPileIndex];
     return targetPile.isNotEmpty;
   }
 

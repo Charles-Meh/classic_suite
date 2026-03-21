@@ -85,4 +85,73 @@ void main() {
     expect(hint.cards, hasLength(1));
     expect(hint.cards.single.card.value, CardValue.ten);
   });
+
+  test('best hint prefers a normal move over an open tableau column', () {
+    final state = buildEmptySpiderState();
+
+    state.tableau[0].add(_faceUpCard(Suit.clubs, CardValue.seven));
+    state.tableau[1].add(_faceUpCard(Suit.spades, CardValue.six));
+    state.tableau[2].clear();
+
+    for (int index = 3; index < state.tableau.length; index++) {
+      state.tableau[index].add(_faceUpCard(Suit.diamonds, CardValue.king));
+    }
+
+    final hint = SpiderAdvisor.bestHint(state);
+
+    expect(hint.kind, SpiderSuggestionKind.moveRun);
+    expect(hint.sourcePileIndex, 1);
+    expect(hint.targetPileIndex, 0);
+    expect(hint.cards, hasLength(1));
+    expect(hint.cards.single.card.value, CardValue.six);
+  });
+
+  test('best hint highlights an open tableau when no normal move exists', () {
+    final state = buildEmptySpiderState();
+
+    state.tableau[0].add(_faceUpCard(Suit.clubs, CardValue.queen));
+    state.tableau[1].add(_faceUpCard(Suit.spades, CardValue.eight));
+    state.tableau[2].clear();
+
+    for (int index = 3; index < state.tableau.length; index++) {
+      state.tableau[index].add(_faceUpCard(Suit.diamonds, CardValue.four));
+    }
+
+    final hint = SpiderAdvisor.bestHint(state);
+
+    expect(hint.kind, SpiderSuggestionKind.useEmptyTableau);
+    expect(hint.targetPileIndex, 2);
+    expect(hint.sourcePileIndex, isNull);
+    expect(hint.cards, isEmpty);
+  });
+
+  test(
+    'best hint suggests dealing when no move exists and no tableau is open',
+    () {
+      final state = buildEmptySpiderState();
+
+      state.tableau[0].add(_faceUpCard(Suit.clubs, CardValue.queen));
+      state.tableau[1].add(_faceUpCard(Suit.spades, CardValue.eight));
+      for (int index = 2; index < state.tableau.length; index++) {
+        state.tableau[index].add(_faceUpCard(Suit.diamonds, CardValue.four));
+      }
+      state.stock.addAll([
+        _faceUpCard(Suit.hearts, CardValue.ace),
+        _faceUpCard(Suit.hearts, CardValue.two),
+        _faceUpCard(Suit.hearts, CardValue.three),
+        _faceUpCard(Suit.hearts, CardValue.four),
+        _faceUpCard(Suit.hearts, CardValue.five),
+        _faceUpCard(Suit.hearts, CardValue.six),
+        _faceUpCard(Suit.hearts, CardValue.seven),
+        _faceUpCard(Suit.hearts, CardValue.eight),
+        _faceUpCard(Suit.hearts, CardValue.nine),
+        _faceUpCard(Suit.hearts, CardValue.ten),
+      ]);
+
+      final hint = SpiderAdvisor.bestHint(state);
+
+      expect(hint.kind, SpiderSuggestionKind.dealFromStock);
+      expect(hint.targetPileIndex, isNull);
+    },
+  );
 }

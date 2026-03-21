@@ -10,6 +10,7 @@ import '../../shared/classic_game_ui.dart';
 import '../../shared/duration_format.dart';
 import '../../shared/help_widgets.dart';
 import '../../shared/win_screen.dart';
+import 'pyramid_advisor.dart';
 import 'pyramid_game_state.dart';
 import 'pyramid_stats.dart';
 import 'pyramid_stats_store.dart';
@@ -25,6 +26,7 @@ class PyramidGame extends StatefulWidget {
 
 class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
   late PyramidGameState state;
+  PyramidHint? _activeHint;
   PyramidGameState? _initialDeal;
   final PyramidStatsStore _statsStore = PyramidStatsStore();
   PyramidStats _stats = const PyramidStats();
@@ -142,6 +144,7 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
     final next = PyramidGameState.newGame(seed: seed);
     _initialDeal = next.copyWith();
     _undoStack.clear();
+    _activeHint = null;
     _hasRecordedResult = false;
 
     final startedStats = _stats.recordGameStarted();
@@ -164,6 +167,7 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
 
     final previousWon = state.isWon;
     setState(() {
+      _activeHint = null;
       state = nextState;
     });
 
@@ -181,6 +185,7 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
     }
     final previous = _undoStack.removeLast();
     setState(() {
+      _activeHint = null;
       state = previous.copyWith(message: 'Undid the last move.');
     });
     _hasRecordedResult = state.isWon;
@@ -190,6 +195,11 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
 
   Future<void> _onCardTap(PyramidCardRef ref) async {
     final nextState = state.tapCard(ref);
+    if (_activeHint != null) {
+      setState(() {
+        _activeHint = null;
+      });
+    }
     if (identical(nextState, state) || nextState.encode() == state.encode()) {
       return;
     }
@@ -198,11 +208,24 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
 
   Future<void> _drawStock() async {
     final nextState = state.drawFromStock();
+    if (_activeHint != null) {
+      setState(() {
+        _activeHint = null;
+      });
+    }
     if (identical(nextState, state) || nextState.encode() == state.encode()) {
       return;
     }
     await _applyState(nextState);
   }
+
+  void _showHint() {
+    setState(() {
+      _activeHint = PyramidAdvisor.bestHint(state);
+    });
+  }
+
+  bool _isHintedCard(PyramidCardRef ref) => _activeHint?.cardRef == ref;
 
   Future<void> _restartDeal() async {
     final seed = _initialDeal?.seed ?? state.seed;
@@ -376,134 +399,39 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildTopShelf(BuildContext context) {
-    final details = ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 320),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (state.cycleCount > 0)
-            _buildStatusChip(
-              'Cycles',
-              '${state.cycleCount}',
-              icon: Icons.refresh_rounded,
-            ),
-          if (state.cycleCount > 0) const SizedBox(height: 12),
-          Text(
-            state.message,
-            key: const Key('pyramid_status_message'),
-            textAlign: TextAlign.right,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.white.withValues(alpha: 0.88),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    final piles = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          key: const Key('pyramid_stock'),
-          onTap: _drawStock,
-          child: _StockCard(
-            canRecycle: state.stock.isEmpty && state.waste.isNotEmpty,
-          ),
-        ),
-        const SizedBox(width: 12),
-        _buildWasteCard(),
-      ],
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compactLayout = constraints.maxWidth < 720;
-        if (compactLayout) {
-          return Column(
-            key: const Key('pyramid_top_shelf'),
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              piles,
-              const SizedBox(height: 12),
-              Align(alignment: Alignment.centerRight, child: details),
-            ],
-          );
-        }
-
-        return Row(
-          key: const Key('pyramid_top_shelf'),
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [piles, const Spacer(), details],
-        );
-      },
-    );
-  }
-
-  Widget _buildStatsRow() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: GameStatsRow(
-        dark: true,
-        items: [
-          GameStatItem(
-            label: 'Time',
-            value: formatElapsedSeconds(state.elapsedSeconds),
-            icon: Icons.timer_outlined,
-          ),
-          GameStatItem(
-            label: 'Cleared',
-            value: '${state.removedCount}/28',
-            icon: Icons.layers_clear_outlined,
-          ),
-          GameStatItem(
-            label: 'Stock',
-            value: '${state.stock.length}',
-            icon: Icons.style_outlined,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusChip(String label, String value, {IconData? icon}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-      ),
+  Widget _buildTopShelf() {
+    return Center(
       child: Row(
+        key: const Key('pyramid_top_shelf'),
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.9)),
-            const SizedBox(width: 8),
-          ],
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.72),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+          GestureDetector(
+            key: const Key('pyramid_stock'),
+            onTap: _drawStock,
+            child: _StockCard(stockCount: state.stock.length),
           ),
+          const SizedBox(width: 12),
+          _buildWasteCard(),
         ],
       ),
+    );
+  }
+
+  Widget _buildHeaderStats() {
+    return GameStatsRow(
+      dark: true,
+      items: [
+        GameStatItem(
+          label: 'Time',
+          value: formatElapsedSeconds(state.elapsedSeconds),
+          icon: Icons.timer_outlined,
+        ),
+        GameStatItem(
+          label: 'Cleared',
+          value: '${state.removedCount}/28',
+          icon: Icons.layers_clear_outlined,
+        ),
+      ],
     );
   }
 
@@ -517,7 +445,7 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
       key: const Key('pyramid_waste_card'),
       card: top,
       selected: state.selectedCard == ref,
-      highlighted: false,
+      highlighted: _isHintedCard(ref),
       onTap: () => _onCardTap(ref),
     );
   }
@@ -532,36 +460,43 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
         final horizontalOverlap = cardWidth * 0.52;
         final cardHeight = cardWidth * 1.4;
         final totalWidth = cardWidth + (6 * horizontalOverlap);
+        final boardWidth = totalWidth + 12;
+        final contentWidth = math.max(availableWidth, boardWidth);
 
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SizedBox(
-            width: totalWidth + 12,
-            child: Column(
-              children: [
-                for (int row = 0; row < state.pyramid.length; row++)
-                  SizedBox(
-                    height: cardHeight * 0.72,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        for (
-                          int column = 0;
-                          column < state.pyramid[row].length;
-                          column++
-                        )
-                          Positioned(
-                            left:
-                                ((6 - row) * horizontalOverlap / 2) +
-                                (column * horizontalOverlap),
-                            top: 0,
-                            child: _buildPyramidCard(row, column),
-                          ),
-                      ],
-                    ),
-                  ),
-                SizedBox(height: cardHeight * 0.45),
-              ],
+            width: contentWidth,
+            child: Center(
+              child: SizedBox(
+                width: boardWidth,
+                child: Column(
+                  children: [
+                    for (int row = 0; row < state.pyramid.length; row++)
+                      SizedBox(
+                        height: cardHeight * 0.72,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            for (
+                              int column = 0;
+                              column < state.pyramid[row].length;
+                              column++
+                            )
+                              Positioned(
+                                left:
+                                    ((6 - row) * horizontalOverlap / 2) +
+                                    (column * horizontalOverlap),
+                                top: 0,
+                                child: _buildPyramidCard(row, column),
+                              ),
+                          ],
+                        ),
+                      ),
+                    SizedBox(height: cardHeight * 0.45),
+                  ],
+                ),
+              ),
             ),
           ),
         );
@@ -572,7 +507,7 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
   Widget _buildPyramidCard(int row, int column) {
     final card = state.pyramid[row][column];
     if (card.removed) {
-      return const _ClearedCardPlaceholder();
+      return const SizedBox(width: 82, height: 116);
     }
 
     final ref = PyramidCardRef.pyramid(row, column);
@@ -581,7 +516,7 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
       key: Key('pyramid_card_${row}_$column'),
       card: card,
       selected: state.selectedCard == ref,
-      highlighted: state.isMatchCandidate(ref),
+      highlighted: _isHintedCard(ref),
       enabled: exposed,
       onTap: exposed ? () => _onCardTap(ref) : null,
     );
@@ -647,7 +582,7 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
           : GameBottomBar(
               onUndo: _undo,
               undoEnabled: _undoStack.isNotEmpty,
-              onHint: _drawStock,
+              onHint: _showHint,
               hintEnabled: !state.isWon,
               onNewDeal: _confirmAndStartFreshGame,
               onStatistics: _showStatistics,
@@ -679,9 +614,9 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                _buildTopShelf(context),
+                                _buildTopShelf(),
                                 const SizedBox(height: 12),
-                                _buildStatsRow(),
+                                _buildHeaderStats(),
                                 const SizedBox(height: 24),
                                 _buildPyramid(context),
                               ],
@@ -720,36 +655,47 @@ class _StatRow extends StatelessWidget {
 }
 
 class _StockCard extends StatelessWidget {
-  const _StockCard({required this.canRecycle});
+  const _StockCard({required this.stockCount});
 
-  final bool canRecycle;
+  final int stockCount;
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        ClassicPlayingCard(
-          card: PlayingCard(Suit.spades, CardValue.ace),
-          width: 82,
-          height: 116,
-          showBack: true,
-        ),
-        Container(
-          width: 82,
-          height: 116,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            color: Colors.black.withValues(alpha: 0.14),
+    return SizedBox(
+      width: 82,
+      height: 116,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ClassicPlayingCard(
+            card: PlayingCard(Suit.spades, CardValue.ace),
+            width: 82,
+            height: 116,
+            showBack: true,
           ),
-          child: Icon(
-            canRecycle ? Icons.refresh_rounded : Icons.style_rounded,
-            color: Colors.white.withValues(alpha: 0.92),
-            size: 28,
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: Container(
+                margin: const EdgeInsets.only(right: 6, bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$stockCount',
+                  key: const Key('pyramid_stock_count'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -760,20 +706,6 @@ class _EmptyPileCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClassicCardPlaceholder(
-      width: 82,
-      height: 116,
-      label: '',
-      dark: true,
-    );
-  }
-}
-
-class _ClearedCardPlaceholder extends StatelessWidget {
-  const _ClearedCardPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const ClassicCardPlaceholder(
       width: 82,
       height: 116,
       label: '',

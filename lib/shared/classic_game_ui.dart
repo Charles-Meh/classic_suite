@@ -14,10 +14,16 @@ class GameStatItem {
 }
 
 class GameStatsRow extends StatelessWidget {
-  const GameStatsRow({super.key, required this.items, this.dark = true});
+  const GameStatsRow({
+    super.key,
+    required this.items,
+    this.dark = true,
+    this.customChildren = const [],
+  });
 
   final List<GameStatItem> items;
   final bool dark;
+  final List<Widget> customChildren;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +32,7 @@ class GameStatsRow extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
+        ...customChildren,
         for (final item in items) _GameStatChip(item: item, dark: dark),
       ],
     );

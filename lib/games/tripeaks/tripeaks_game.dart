@@ -440,9 +440,18 @@ class _TriPeaksGameState extends State<TriPeaksGame>
     TriPeaksCard? card,
     _TriPeaksMetrics metrics, {
     bool highlighted = false,
+    bool showEmptyPlaceholder = false,
     Key? key,
     VoidCallback? onTap,
   }) {
+    if (card == null && !showEmptyPlaceholder) {
+      return SizedBox(
+        key: key,
+        width: metrics.cardWidth,
+        height: metrics.cardHeight,
+      );
+    }
+
     final borderColor = Theme.of(
       context,
     ).colorScheme.outline.withValues(alpha: 0.18);
@@ -576,6 +585,7 @@ class _TriPeaksGameState extends State<TriPeaksGame>
                 _buildCard(
                   null,
                   metrics,
+                  showEmptyPlaceholder: true,
                   highlighted: _isStockHinted,
                   key: stockKey,
                 ),

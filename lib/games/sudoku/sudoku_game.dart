@@ -177,6 +177,14 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
     await _persistState();
   }
 
+  Future<void> _handleDifficultySelection(SudokuDifficulty difficulty) async {
+    if (difficulty == _selectedDifficulty) {
+      return;
+    }
+
+    await _setDifficulty(difficulty);
+  }
+
   Future<void> _showHelp() async {
     await showDialog<void>(
       context: context,
@@ -210,7 +218,7 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                     items: [
                       'Tap a cell, then choose a number.',
                       'Turn on Notes to add pencil marks instead of final values.',
-                      'Use All notes to fill candidates for every open cell.',
+                      'Use the difficulty menu to start a new puzzle at another level.',
                       'Undo reverses your last move.',
                       'The game autosaves as you play.',
                     ],
@@ -228,54 +236,6 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
         ],
       ),
     );
-  }
-
-  Future<void> _openDifficultySettings() async {
-    final selected = await showDialog<SudokuDifficulty>(
-      context: context,
-      builder: (context) {
-        var choice = _selectedDifficulty;
-        return StatefulBuilder(
-          builder: (context, setLocalState) => AlertDialog(
-            title: const Text('Difficulty'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final difficulty in SudokuDifficulty.values)
-                  ListTile(
-                    key: Key('sudoku_difficulty_${difficulty.name}'),
-                    title: Text(difficulty.label),
-                    trailing: choice == difficulty
-                        ? const Icon(Icons.check_circle)
-                        : const Icon(Icons.circle_outlined),
-                    onTap: () {
-                      setLocalState(() {
-                        choice = difficulty;
-                      });
-                    },
-                  ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(choice),
-                child: const Text('Apply'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (!mounted || selected == null || selected == _selectedDifficulty) {
-      return;
-    }
-
-    await _setDifficulty(selected);
   }
 
   Future<void> _handleDigitInput(int value) async {
@@ -297,12 +257,6 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
   Future<void> _handleUndo() async {
     await _applyAndPersist(() {
       state.undo();
-    });
-  }
-
-  Future<void> _handleFillAllNotes() async {
-    await _applyAndPersist(() {
-      state.autoFillAllPencilMarks();
     });
   }
 
@@ -439,6 +393,74 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildDifficultyButton(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return PopupMenuButton<SudokuDifficulty>(
+      key: const Key('sudoku_difficulty_button'),
+      tooltip: 'Difficulty',
+      onSelected: _handleDifficultySelection,
+      itemBuilder: (context) {
+        return [
+          for (final difficulty in SudokuDifficulty.values)
+            PopupMenuItem<SudokuDifficulty>(
+              value: difficulty,
+              child: Text(
+                difficulty.label,
+                key: Key('sudoku_difficulty_${difficulty.name}'),
+              ),
+            ),
+        ];
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.tune_rounded,
+              size: 18,
+              color: scheme.onSurface.withValues(alpha: 0.92),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Difficulty',
+                  style: TextStyle(
+                    color: scheme.onSurface.withValues(alpha: 0.75),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  state.difficulty.label,
+                  style: TextStyle(
+                    color: scheme.onSurface,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.arrow_drop_down_rounded,
+              color: scheme.onSurface.withValues(alpha: 0.85),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final remaining = state.remainingCount;
@@ -456,7 +478,7 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
           ),
           IconButton(
             tooltip: 'Settings',
-            onPressed: _openDifficultySettings,
+            onPressed: null,
             icon: const Icon(Icons.settings_outlined),
           ),
         ],
@@ -537,12 +559,10 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                                 children: [
                                   GameStatsRow(
                                     dark: false,
+                                    customChildren: [
+                                      _buildDifficultyButton(context),
+                                    ],
                                     items: [
-                                      GameStatItem(
-                                        label: 'Difficulty',
-                                        value: state.difficulty.label,
-                                        icon: Icons.tune_rounded,
-                                      ),
                                       GameStatItem(
                                         label: 'Time',
                                         value: formatElapsedSeconds(
@@ -656,15 +676,6 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
                       icon: const Icon(Icons.edit_note_rounded),
                       label: const Text('Notes'),
                     ),
-            ),
-            SizedBox(
-              height: 48,
-              child: OutlinedButton.icon(
-                key: const Key('sudoku_fill_all_notes'),
-                onPressed: state.completed ? null : _handleFillAllNotes,
-                icon: const Icon(Icons.auto_fix_high_rounded),
-                label: const Text('All notes'),
-              ),
             ),
             SizedBox(
               height: 48,

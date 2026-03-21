@@ -289,7 +289,7 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('How Hearts works'),
+        title: const Text('How to play Hearts'),
         content: const SingleChildScrollView(
           child: Text(
             '• Each hand starts with a pass: left, right, across, then hold.\n\n'
@@ -311,301 +311,363 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildScoreboard(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Hand ${state.handNumber + 1} • ${state.passDirectionLabel}',
-                    key: const Key('hearts_status_title'),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                IconButton(
-                  key: const Key('hearts_undo'),
-                  tooltip: 'Undo',
-                  onPressed: _history.isEmpty ? null : _undo,
-                  icon: const Icon(Icons.undo),
-                ),
-                IconButton(
-                  key: const Key('hearts_pause'),
-                  tooltip: state.isPaused ? 'Resume' : 'Pause',
-                  onPressed: _togglePause,
-                  icon: Icon(state.isPaused ? Icons.play_arrow : Icons.pause),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Game menu',
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'new':
-                        await _newMatch();
-                      case 'stats':
-                        await _showStats();
-                      case 'rules':
-                        await _showRules();
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'new', child: Text('New match')),
-                    PopupMenuItem(value: 'stats', child: Text('Statistics')),
-                    PopupMenuItem(value: 'rules', child: Text('Rules / help')),
-                  ],
-                ),
-              ],
+  // ---------------------------------------------------------------------------
+  // Score strip — compact row of 4 player indicators at the top
+  // ---------------------------------------------------------------------------
+
+  Widget _buildScoreStrip() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Row(
+        children: [
+          for (int i = 0; i < 4; i++) ...[
+            if (i > 0) const SizedBox(width: 6),
+            Expanded(
+              child: _PlayerChip(state: state, player: i),
             ),
-            const SizedBox(height: 12),
-            GameStatsRow(
-              dark: false,
-              items: [
-                GameStatItem(
-                  label: 'Match',
-                  value: '${state.matchScores[0]}',
-                  icon: Icons.scoreboard_outlined,
-                ),
-                GameStatItem(
-                  label: 'Hand',
-                  value: '${state.handPoints[0]}',
-                  icon: Icons.favorite_outline,
-                ),
-                GameStatItem(
-                  label: 'Tricks',
-                  value: '${state.tricksWon[0]}',
-                  icon: Icons.style_outlined,
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              alignment: WrapAlignment.center,
-              children: [
-                for (int player = 0; player < 4; player++)
-                  Container(
-                    width: 150,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: player == 0
-                          ? scheme.primaryContainer
-                          : scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          state.playerLabel(player),
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 6),
-                        Text('Match: ${state.matchScores[player]}'),
-                        Text('Hand: ${state.handPoints[player]}'),
-                        Text('Tricks: ${state.tricksWon[player]}'),
-                        if (player != 0)
-                          Text('Cards: ${state.hands[player].length}'),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final speed in HeartsSpeed.values)
-                  ChoiceChip(
-                    key: Key('hearts_speed_${speed.name}'),
-                    label: Text(switch (speed) {
-                      HeartsSpeed.instant => 'Fast',
-                      HeartsSpeed.normal => 'Normal',
-                      HeartsSpeed.relaxed => 'Relaxed',
-                    }),
-                    selected: state.speed == speed,
-                    onSelected: (_) => _setSpeed(speed),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(state.message, key: const Key('hearts_message')),
-            if (state.lastRoundMoonShooter != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  '${state.playerLabel(state.lastRoundMoonShooter!)} shot the moon.',
-                  key: const Key('hearts_moon_banner'),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ),
           ],
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Table centre — compass-layout trick display with opponent indicators
+  // ---------------------------------------------------------------------------
+
+  Widget _buildTableCenter() {
+    final isPassing =
+        state.isPassing && state.passDirection != HeartsPassDirection.hold;
+    return Expanded(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: Stack(
+              children: [
+                // North
+                Align(
+                  alignment: const Alignment(0, -0.85),
+                  child: _OpponentLabel(state: state, player: 2),
+                ),
+                Align(
+                  alignment: const Alignment(0, -0.42),
+                  child: _TrickSlot(play: _trickPlayFor(2)),
+                ),
+                // West
+                Align(
+                  alignment: const Alignment(-0.85, 0),
+                  child: _OpponentLabel(state: state, player: 1),
+                ),
+                Align(
+                  alignment: const Alignment(-0.38, 0),
+                  child: _TrickSlot(play: _trickPlayFor(1)),
+                ),
+                // East
+                Align(
+                  alignment: const Alignment(0.85, 0),
+                  child: _OpponentLabel(state: state, player: 3),
+                ),
+                Align(
+                  alignment: const Alignment(0.38, 0),
+                  child: _TrickSlot(play: _trickPlayFor(3)),
+                ),
+                // South (you)
+                Align(
+                  alignment: const Alignment(0, 0.42),
+                  child: _TrickSlot(play: _trickPlayFor(0)),
+                ),
+                // Status message in the centre
+                Center(child: _buildStatusChip()),
+                // Pass direction indicator
+                if (isPassing)
+                  Align(
+                    alignment: const Alignment(0, 0.85),
+                    child: _buildPassDirectionChip(),
+                  ),
+                // Round / match actions
+                if (state.isRoundComplete || state.isMatchComplete)
+                  Align(
+                    alignment: const Alignment(0, 0.85),
+                    child: _buildRoundActions(),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildTable(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _OpponentStatus(
-                  label: 'North',
-                  details: '${state.hands[2].length} cards',
-                  active: state.currentPlayer == 2 && state.isPlaying,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _OpponentStatus(
-                    label: 'West',
-                    details: '${state.hands[1].length} cards',
-                    active: state.currentPlayer == 1 && state.isPlaying,
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: scheme.outlineVariant),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          state.currentTrick.isEmpty
-                              ? 'Current trick'
-                              : 'Trick in progress',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            for (final play in state.currentTrick)
-                              Column(
-                                children: [
-                                  Text(state.playerLabel(play.player)),
-                                  _CardFace(card: play.card, compact: true),
-                                ],
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: _OpponentStatus(
-                    label: 'East',
-                    details: '${state.hands[3].length} cards',
-                    active: state.currentPlayer == 3 && state.isPlaying,
-                  ),
-                ),
-              ],
-            ),
-          ],
+  HeartsTrickPlay? _trickPlayFor(int player) {
+    for (final play in state.currentTrick) {
+      if (play.player == player) return play;
+    }
+    return null;
+  }
+
+  Widget _buildStatusChip() {
+    final msg = state.message;
+    if (msg.isEmpty) return const SizedBox.shrink();
+    return Container(
+      key: const Key('hearts_message'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        state.lastRoundMoonShooter != null
+            ? '${state.playerLabel(state.lastRoundMoonShooter!)} shot the moon!'
+            : msg,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
         ),
+        textAlign: TextAlign.center,
       ),
     );
   }
 
-  Widget _buildHumanHand(BuildContext context) {
+  Widget _buildPassDirectionChip() {
+    final icon = switch (state.passDirection) {
+      HeartsPassDirection.left => Icons.arrow_back_rounded,
+      HeartsPassDirection.right => Icons.arrow_forward_rounded,
+      HeartsPassDirection.across => Icons.swap_vert_rounded,
+      HeartsPassDirection.hold => Icons.front_hand_rounded,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.white70),
+          const SizedBox(width: 6),
+          Text(
+            state.passDirectionLabel,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoundActions() {
+    if (state.isMatchComplete) {
+      return FilledButton.icon(
+        key: const Key('hearts_new_match'),
+        onPressed: _newMatch,
+        icon: const Icon(Icons.casino_outlined),
+        label: const Text('New Match'),
+      );
+    }
+    return FilledButton.icon(
+      key: const Key('hearts_next_hand'),
+      onPressed: _startNextHand,
+      icon: const Icon(Icons.skip_next_rounded),
+      label: const Text('Next Hand'),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Human hand — overlapping fan of cards with pass/play interactions
+  // ---------------------------------------------------------------------------
+
+  Widget _buildPlayerHand() {
     final isPassing =
         state.isPassing && state.passDirection != HeartsPassDirection.hold;
     final legal = state.legalPlaysFor(0).map((card) => card.key).toSet();
+    final hand = state.hands[0];
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F3F25),
+          border: Border(
+            top: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+          ),
+        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    isPassing ? 'Your hand — choose 3 to pass' : 'Your hand',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+            // Pass confirmation row
+            if (isPassing)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: Row(
+                  children: [
+                    Text(
+                      'Select ${3 - state.selectedPassCards.length} more'
+                      '${state.selectedPassCards.isEmpty ? ' cards to pass' : ''}',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 13,
+                      ),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      key: const Key('hearts_confirm_pass'),
+                      onPressed: state.selectedPassCards.length == 3
+                          ? _confirmPass
+                          : null,
+                      child: Text('Pass ${state.selectedPassCards.length}/3'),
+                    ),
+                  ],
                 ),
-                if (state.isRoundComplete && !state.isMatchComplete)
-                  FilledButton(
-                    key: const Key('hearts_next_hand'),
-                    onPressed: _startNextHand,
-                    child: const Text('Next hand'),
-                  ),
-                if (state.isMatchComplete)
-                  FilledButton(
-                    key: const Key('hearts_new_match'),
-                    onPressed: _newMatch,
-                    child: const Text('New match'),
-                  ),
-                if (isPassing)
-                  FilledButton(
-                    key: const Key('hearts_confirm_pass'),
-                    onPressed: state.selectedPassCards.length == 3
-                        ? _confirmPass
-                        : null,
-                    child: Text('Pass ${state.selectedPassCards.length}/3'),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final card in state.hands[0])
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: GestureDetector(
-                        onTap: () {
-                          if (state.isPaused ||
-                              state.isRoundComplete ||
-                              state.isMatchComplete) {
-                            return;
-                          }
-                          if (isPassing) {
-                            _togglePassSelection(card.key);
-                          } else if (state.isHumanTurn &&
-                              legal.contains(card.key)) {
-                            _playHumanCard(card.key);
-                          }
-                        },
-                        child: _CardFace(
-                          key: Key('hearts_human_card_${card.key}'),
-                          card: card,
-                          selected: state.selectedPassCards.contains(card.key),
-                          playable:
-                              !isPassing &&
-                              legal.contains(card.key) &&
-                              state.isHumanTurn &&
-                              !state.isPaused,
+              ),
+            // Card fan
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  const double cardW = 72;
+                  const double cardH = 100;
+                  if (hand.isEmpty) {
+                    return const SizedBox(height: cardH);
+                  }
+                  final available = constraints.maxWidth - cardW;
+                  final overlap = hand.length > 1
+                      ? (available / (hand.length - 1)).clamp(18.0, 52.0)
+                      : 0.0;
+                  final totalWidth = cardW + overlap * (hand.length - 1);
+
+                  return SizedBox(
+                    height: cardH + 22,
+                    child: Center(
+                      child: SizedBox(
+                        width: totalWidth,
+                        height: cardH + 22,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            for (int i = 0; i < hand.length; i++)
+                              _buildHandCard(
+                                hand[i],
+                                i,
+                                overlap,
+                                isPassing,
+                                legal,
+                              ),
+                          ],
                         ),
                       ),
                     ),
-                ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHandCard(
+    HeartsCard card,
+    int index,
+    double overlap,
+    bool isPassing,
+    Set<String> legal,
+  ) {
+    final isSelected = state.selectedPassCards.contains(card.key);
+    final isPlayable =
+        !isPassing &&
+        legal.contains(card.key) &&
+        state.isHumanTurn &&
+        !state.isPaused;
+    final isDimmed =
+        !isPassing &&
+        state.isPlaying &&
+        state.isHumanTurn &&
+        !isPlayable &&
+        !state.isPaused;
+    final yOffset = isSelected ? -20.0 : (isDimmed ? 8.0 : 0.0);
+
+    return AnimatedPositioned(
+      duration: kCardHighlightDuration,
+      curve: Curves.easeOut,
+      left: index * overlap,
+      top: yOffset + 22,
+      child: GestureDetector(
+        onTap: () {
+          if (state.isPaused ||
+              state.isRoundComplete ||
+              state.isMatchComplete) {
+            return;
+          }
+          if (isPassing) {
+            _togglePassSelection(card.key);
+          } else if (isPlayable) {
+            _playHumanCard(card.key);
+          }
+        },
+        child: _CardFace(
+          key: Key('hearts_human_card_${card.key}'),
+          card: card,
+          selected: isSelected,
+          playable: isPlayable,
+          dimmed: isDimmed,
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Bottom bar — dark green, Undo | New Match | Statistics
+  // ---------------------------------------------------------------------------
+
+  Widget _buildBottomBar() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F3F25),
+          border: Border(
+            top: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 18,
+              offset: Offset(0, -6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Tooltip(
+              message: 'Undo',
+              child: IconButton.filledTonal(
+                key: const Key('hearts_undo'),
+                onPressed: _history.isEmpty || state.isPaused ? null : _undo,
+                icon: const Icon(Icons.undo),
+              ),
+            ),
+            const Spacer(),
+            FilledButton.icon(
+              onPressed: _confirmAndStartNewMatch,
+              icon: const Icon(Icons.casino_outlined),
+              label: const Text('New Match'),
+            ),
+            const Spacer(),
+            Tooltip(
+              message: 'Statistics',
+              child: IconButton.filledTonal(
+                onPressed: _showStats,
+                icon: const Icon(Icons.bar_chart_rounded),
               ),
             ),
           ],
@@ -657,56 +719,79 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
         leading: const BackButton(),
         centerTitle: true,
         title: const Text('Hearts'),
+        backgroundColor: const Color(0xFF14532D),
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             tooltip: 'Help',
             onPressed: _showRules,
             icon: const Icon(Icons.help_outline_rounded),
           ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: _togglePause,
-            icon: const Icon(Icons.settings_outlined),
+          PopupMenuButton<String>(
+            tooltip: 'Game menu',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) async {
+              switch (value) {
+                case 'new':
+                  await _confirmAndStartNewMatch();
+                case 'stats':
+                  await _showStats();
+                case 'pause':
+                  await _togglePause();
+                case 'speed_instant':
+                  await _setSpeed(HeartsSpeed.instant);
+                case 'speed_normal':
+                  await _setSpeed(HeartsSpeed.normal);
+                case 'speed_relaxed':
+                  await _setSpeed(HeartsSpeed.relaxed);
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'new', child: Text('New match')),
+              const PopupMenuItem(value: 'stats', child: Text('Statistics')),
+              PopupMenuItem(
+                value: 'pause',
+                child: Text(state.isPaused ? 'Resume' : 'Pause'),
+              ),
+              const PopupMenuDivider(),
+              CheckedPopupMenuItem(
+                value: 'speed_instant',
+                checked: state.speed == HeartsSpeed.instant,
+                child: const Text('Fast'),
+              ),
+              CheckedPopupMenuItem(
+                value: 'speed_normal',
+                checked: state.speed == HeartsSpeed.normal,
+                child: const Text('Normal'),
+              ),
+              CheckedPopupMenuItem(
+                value: 'speed_relaxed',
+                checked: state.speed == HeartsSpeed.relaxed,
+                child: const Text('Relaxed'),
+              ),
+            ],
           ),
         ],
       ),
-      bottomNavigationBar: _loading
-          ? null
-          : GameBottomBar(
-              onUndo: _undo,
-              undoEnabled: _history.isNotEmpty && !state.isPaused,
-              onHint: state.isPassing && state.selectedPassCards.length < 3
-                  ? null
-                  : _showRules,
-              hintEnabled: !state.isPaused,
-              onNewDeal: _confirmAndStartNewMatch,
-              onStatistics: _showStats,
-              newDealLabel: 'New Match',
-            ),
+      bottomNavigationBar: _loading ? null : _buildBottomBar(),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
+          : Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF1E6B43), Color(0xFF14532D)],
+                ),
+              ),
               child: Stack(
                 children: [
-                  SingleChildScrollView(
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1200),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildScoreboard(context),
-                              const SizedBox(height: 16),
-                              _buildTable(context),
-                              const SizedBox(height: 16),
-                              _buildHumanHand(context),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+                  Column(
+                    children: [
+                      _buildScoreStrip(),
+                      _buildTableCenter(),
+                      _buildPlayerHand(),
+                    ],
                   ),
                   if (_humanWonMatch) _buildWinOverlay(),
                 ],
@@ -716,18 +801,25 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
   }
 }
 
+// =============================================================================
+// Private helper widgets
+// =============================================================================
+
+/// A single card rendered using the playing_cards package.
 class _CardFace extends StatelessWidget {
   const _CardFace({
     super.key,
     required this.card,
     this.selected = false,
     this.playable = false,
+    this.dimmed = false,
     this.compact = false,
   });
 
   final HeartsCard card;
   final bool selected;
   final bool playable;
+  final bool dimmed;
   final bool compact;
 
   PlayingCard _toPlayingCard() {
@@ -757,53 +849,174 @@ class _CardFace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedScale(
+    final Color? highlight = selected
+        ? const Color(0xFFFFD971)
+        : playable
+        ? const Color(0xFF8DD9FF)
+        : null;
+    return AnimatedOpacity(
       duration: kCardHighlightDuration,
-      scale: selected ? 1.04 : 1,
-      child: ClassicPlayingCard(
-        card: _toPlayingCard(),
-        width: compact ? 64 : 72,
-        height: compact ? 86 : 100,
-        borderColor: Theme.of(context).colorScheme.outlineVariant,
-        highlightColor: selected || playable
-            ? Theme.of(context).colorScheme.primary
-            : null,
-        borderWidth: selected || playable ? 2 : 1.2,
+      opacity: dimmed ? 0.45 : 1.0,
+      child: AnimatedScale(
+        duration: kCardHighlightDuration,
+        scale: selected ? 1.06 : 1,
+        child: ClassicPlayingCard(
+          card: _toPlayingCard(),
+          width: compact ? 68 : 72,
+          height: compact ? 95 : 100,
+          borderColor: highlight ?? Colors.white.withValues(alpha: 0.35),
+          highlightColor: highlight,
+          borderWidth: highlight != null ? 2.4 : 1.2,
+        ),
       ),
     );
   }
 }
 
-class _OpponentStatus extends StatelessWidget {
-  const _OpponentStatus({
-    required this.label,
-    required this.details,
-    required this.active,
-  });
+/// Compact player score indicator for the top strip.
+class _PlayerChip extends StatelessWidget {
+  const _PlayerChip({required this.state, required this.player});
 
-  final String label;
-  final String details;
-  final bool active;
+  final HeartsGameState state;
+  final int player;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final isActive = state.isPlaying && state.currentPlayer == player;
+    final isHuman = player == 0;
     return AnimatedContainer(
       duration: kCardHighlightDuration,
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: active
-            ? scheme.secondaryContainer
-            : scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        color: isActive
+            ? const Color(0xFFFFD971).withValues(alpha: 0.22)
+            : isHuman
+            ? Colors.white.withValues(alpha: 0.14)
+            : Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isActive
+              ? const Color(0xFFFFD971).withValues(alpha: 0.55)
+              : Colors.white.withValues(alpha: 0.10),
+          width: isActive ? 1.6 : 1,
+        ),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
-          Text(details),
+          Text(
+            state.playerLabel(player),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: 11,
+              fontWeight: isHuman ? FontWeight.w700 : FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${state.matchScores[player]}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          if (state.handPoints[player] > 0)
+            Text(
+              '+${state.handPoints[player]}',
+              style: TextStyle(
+                color: state.handPoints[player] > 10
+                    ? const Color(0xFFFF8A80)
+                    : Colors.white.withValues(alpha: 0.6),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+/// Opponent name / card-count badge next to the table.
+class _OpponentLabel extends StatelessWidget {
+  const _OpponentLabel({required this.state, required this.player});
+
+  final HeartsGameState state;
+  final int player;
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = state.isPlaying && state.currentPlayer == player;
+    final cardCount = state.hands[player].length;
+    return AnimatedContainer(
+      duration: kCardHighlightDuration,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isActive
+            ? const Color(0xFFFFD971).withValues(alpha: 0.20)
+            : Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: isActive
+              ? const Color(0xFFFFD971).withValues(alpha: 0.50)
+              : Colors.white.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            state.playerLabel(player),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '$cardCount',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.75),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A single slot in the trick area — shows a card or an empty placeholder.
+class _TrickSlot extends StatelessWidget {
+  const _TrickSlot({this.play});
+
+  final HeartsTrickPlay? play;
+
+  @override
+  Widget build(BuildContext context) {
+    if (play != null) {
+      return _CardFace(card: play!.card, compact: true);
+    }
+    return Container(
+      width: 68,
+      height: 95,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.18),
+          width: 1.2,
+        ),
       ),
     );
   }

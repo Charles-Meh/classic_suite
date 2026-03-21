@@ -40,16 +40,21 @@ void main() {
     WidgetTester tester,
   ) async {
     await _pumpSudoku(tester);
+    final settingsButton = tester.widgetList<IconButton>(find.byType(IconButton)).firstWhere(
+      (button) => button.tooltip == 'Settings',
+    );
 
     expect(find.text('Sudoku'), findsOneWidget);
     expect(find.byKey(const Key('sudoku_cell_0_0')), findsOneWidget);
     expect(find.text('New Game'), findsOneWidget);
+    expect(find.byKey(const Key('sudoku_difficulty_button')), findsOneWidget);
     expect(find.byTooltip('Settings'), findsOneWidget);
     expect(find.byTooltip('Help'), findsOneWidget);
+    expect(settingsButton.onPressed, isNull);
     expect(find.byKey(const Key('sudoku_status_message')), findsNothing);
     expect(find.text('Filled'), findsNothing);
     expect(find.text('00:00'), findsOneWidget);
-    expect(find.text('All notes'), findsOneWidget);
+    expect(find.text('All notes'), findsNothing);
     expect(find.text('Notes'), findsOneWidget);
     expect(find.text('Save'), findsNothing);
     expect(find.text('Load'), findsNothing);
@@ -100,6 +105,26 @@ void main() {
     final cell = find.byKey(const Key('sudoku_cell_0_2'));
     expect(find.descendant(of: cell, matching: find.text('1')), findsOneWidget);
     expect(find.descendant(of: cell, matching: find.text('2')), findsOneWidget);
+  });
+
+  testWidgets('difficulty selector starts a puzzle at the chosen level', (
+    WidgetTester tester,
+  ) async {
+    await _pumpSudoku(tester);
+
+    await tester.tap(find.byKey(const Key('sudoku_difficulty_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('sudoku_difficulty_hard')).last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('sudoku_difficulty_button')),
+        matching: find.text('Hard'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('statistics show current timer and best times per difficulty', (

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:classic_suite/games/tripeaks/tripeaks_game.dart';
 import 'package:classic_suite/games/tripeaks/tripeaks_game_state.dart';
+import 'package:classic_suite/shared/classic_game_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -252,4 +253,61 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets(
+    'cleared tableau slots are transparent while empty stock stays visible',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 1600));
+      final tableau = List<TriPeaksCard?>.filled(28, null);
+      tableau[18] = _card(CardValue.eight);
+      final state = TriPeaksGameState.debug(
+        tableau: tableau,
+        stock: const [],
+        waste: [_card(CardValue.nine)],
+        message: 'Debug deal',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: TriPeaksGame(initialState: state)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('tripeaks_tableau_0')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('tripeaks_tableau_0')),
+          matching: find.byType(DecoratedBox),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('tripeaks_stock_idle')),
+          matching: find.byWidgetPredicate((widget) {
+            if (widget is! DecoratedBox) {
+              return false;
+            }
+
+            final decoration = widget.decoration;
+            if (decoration is! BoxDecoration) {
+              return false;
+            }
+
+            return decoration.color == Colors.white.withValues(alpha: 0.12);
+          }),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('tripeaks_stock_idle')),
+          matching: find.byType(ClassicPlayingCard),
+        ),
+        findsNothing,
+      );
+    },
+  );
 }

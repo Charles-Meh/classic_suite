@@ -5,6 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:playing_cards/playing_cards.dart';
 
+Finder _horizontalScrollViews() => find.byWidgetPredicate(
+  (widget) =>
+      widget is SingleChildScrollView &&
+      widget.scrollDirection == Axis.horizontal,
+);
+
 void main() {
   group('FreeCellGameState', () {
     test('top card can move to freecell and foundation', () {
@@ -111,6 +117,17 @@ void main() {
     expect(find.text('New Deal'), findsOneWidget);
     expect(find.byTooltip('Undo'), findsOneWidget);
     expect(find.byTooltip('Statistics'), findsOneWidget);
+    expect(find.text('FC'), findsNWidgets(4));
+    expect(find.text('♣'), findsOneWidget);
+    expect(find.text('♦'), findsOneWidget);
+    expect(find.text('♥'), findsOneWidget);
+    expect(find.text('♠'), findsOneWidget);
+    expect(_horizontalScrollViews(), findsOneWidget);
+
+    final leftEdge = tester.getTopLeft(find.text('FC').first).dx;
+    final rightEdge = tester.getTopRight(find.text('♠')).dx;
+    expect(leftEdge, greaterThanOrEqualTo(0));
+    expect(rightEdge, lessThanOrEqualTo(320));
     expect(tester.takeException(), isNull);
   });
 

@@ -151,6 +151,45 @@ SpiderGameState _buildSimpleSpiderMoveState() {
   return state;
 }
 
+SpiderGameState _buildSpiderEmptyTableauFallbackState() {
+  final state = SpiderGameState();
+  state.stock.clear();
+  for (final pile in state.tableau) {
+    pile.clear();
+  }
+  state.completedRuns.clear();
+
+  state.tableau[0].add(
+    KlondikeCard(PlayingCard(Suit.clubs, CardValue.queen), faceUp: true),
+  );
+  state.tableau[1].add(
+    KlondikeCard(PlayingCard(Suit.spades, CardValue.eight), faceUp: true),
+  );
+  for (int index = 3; index < state.tableau.length; index++) {
+    state.tableau[index].add(
+      KlondikeCard(PlayingCard(Suit.spades, CardValue.four), faceUp: true),
+    );
+  }
+  return state;
+}
+
+SpiderGameState _buildSpiderDealHintState() {
+  final state = _buildSpiderEmptyTableauFallbackState();
+  state.tableau[2].add(
+    KlondikeCard(PlayingCard(Suit.hearts, CardValue.ace), faceUp: true),
+  );
+  state.stock.addAll(
+    List.generate(
+      10,
+      (index) => KlondikeCard(
+        PlayingCard(Suit.hearts, CardValue.values[index]),
+        faceUp: false,
+      ),
+    ),
+  );
+  return state;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -235,4 +274,43 @@ void main() {
     );
     expect(state.stock, hasLength(10));
   });
+
+  testWidgets(
+    'spider hint highlights an open tableau when no normal move exists',
+    (WidgetTester tester) async {
+      final state = _buildSpiderEmptyTableauFallbackState();
+
+      await tester.pumpWidget(_buildSpiderHarness(state));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Hint'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('spider_tableau_2_empty_hint')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('spider_hint_stock')), findsNothing);
+      expect(find.byKey(const Key('spider_tableau_0_drop_hint')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'spider hint points to stock when no move exists and no tableau is open',
+    (WidgetTester tester) async {
+      final state = _buildSpiderDealHintState();
+
+      await tester.pumpWidget(_buildSpiderHarness(state));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Hint'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('spider_hint_stock')), findsOneWidget);
+      expect(
+        find.byKey(const Key('spider_tableau_2_empty_hint')),
+        findsNothing,
+      );
+    },
+  );
 }

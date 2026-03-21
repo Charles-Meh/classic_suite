@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:classic_suite/games/twenty_forty_eight/twenty_forty_eight_game.dart';
 import 'package:classic_suite/games/twenty_forty_eight/twenty_forty_eight_game_state.dart';
 import 'package:flutter/material.dart';
@@ -29,6 +31,39 @@ List<TwentyFortyEightTile> _boardFromValues(List<List<int>> grid) {
   return tiles;
 }
 
+void _expectHeaderStats({
+  required int score,
+  required int best,
+  required int moves,
+  String? time,
+}) {
+  final zeroValueCount = [
+    score,
+    best,
+    moves,
+  ].where((value) => value == 0).length;
+
+  expect(find.text('Score'), findsOneWidget);
+  expect(find.text('Best'), findsOneWidget);
+  expect(find.text('Moves'), findsOneWidget);
+  expect(find.text('Time'), findsOneWidget);
+  if (score != 0) {
+    expect(find.text('$score'), findsOneWidget);
+  }
+  if (best != 0) {
+    expect(find.text('$best'), findsOneWidget);
+  }
+  if (moves != 0) {
+    expect(find.text('$moves'), findsOneWidget);
+  }
+  if (zeroValueCount > 0) {
+    expect(find.text('0'), findsAtLeastNWidgets(zeroValueCount));
+  }
+  if (time != null) {
+    expect(find.text(time), findsOneWidget);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -36,7 +71,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('saved state is restored on launch', (tester) async {
+  testWidgets('saved state with legacy message keys is restored on launch', (
+    tester,
+  ) async {
     final saved = TwentyFortyEightGameState.debug(
       tiles: _boardFromValues([
         [2, 4, 0, 0],
@@ -48,15 +85,40 @@ void main() {
       moveCount: 3,
       elapsedSeconds: 22,
     );
+    final legacyJson = saved.toJson();
+    legacyJson['message'] = 'Swipe anywhere to begin.';
+    legacyJson['undoStack'] = [
+      {
+        'tiles': [
+          {
+            'id': 1,
+            'value': 2,
+            'row': 0,
+            'column': 0,
+            'isNew': false,
+            'isMerged': false,
+          },
+        ],
+        'score': 0,
+        'moveCount': 0,
+        'hasWon': false,
+        'keepGoing': false,
+        'status': TwentyFortyEightStatus.ready.name,
+        'message': 'Legacy undo message',
+        'nextTileId': 2,
+        'startedAt': null,
+        'elapsedSeconds': 0,
+      },
+    ];
     SharedPreferences.setMockInitialValues({
-      TwentyFortyEightGameState.storageKey: saved.encode(),
+      TwentyFortyEightGameState.storageKey: jsonEncode(legacyJson),
     });
 
     await tester.pumpWidget(const MaterialApp(home: TwentyFortyEightGame()));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Score 12'), findsOneWidget);
-    expect(find.text('00:22'), findsOneWidget);
+    _expectHeaderStats(score: 12, best: 0, moves: 3, time: '00:22');
+    expect(find.text('Swipe anywhere to begin.'), findsNothing);
     expect(find.text('4'), findsWidgets);
   });
 
@@ -81,7 +143,6 @@ void main() {
           hasWon: false,
           keepGoing: false,
           status: TwentyFortyEightStatus.ready,
-          message: 'Swipe anywhere to begin.',
           nextTileId: 3,
           startedAt: null,
           elapsedSeconds: 0,
@@ -99,9 +160,8 @@ void main() {
     await tester.tap(find.byTooltip('Undo'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Move undone.'), findsOneWidget);
     expect(find.text('2'), findsWidgets);
-    expect(find.textContaining('Score 0'), findsOneWidget);
+    _expectHeaderStats(score: 0, best: 0, moves: 0, time: '00:00');
   });
 
   testWidgets('app bar keeps help and disabled settings only', (tester) async {
@@ -149,7 +209,9 @@ void main() {
     expect(find.text('Best score'), findsOneWidget);
   });
 
-  testWidgets('new game resets the board quickly', (tester) async {
+  testWidgets('new game asks for confirmation before resetting', (
+    tester,
+  ) async {
     final state = TwentyFortyEightGameState.debug(
       tiles: _boardFromValues([
         [128, 64, 32, 16],
@@ -167,7 +229,53 @@ void main() {
     await tester.tap(find.text('New Game'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Score 0'), findsOneWidget);
-    expect(find.text('Swipe anywhere to begin.'), findsOneWidget);
+    expect(find.text('Start new game?'), findsOneWidget);
+    expect(find.text('Current progress will be lost.'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    _expectHeaderStats(score: 999, best: 0, moves: 20);
+    expect(find.text('128'), findsWidgets);
+
+    await tester.tap(find.text('New Game'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New Game').last);
+    await tester.pumpAndSettle();
+
+    _expectHeaderStats(score: 0, best: 0, moves: 0, time: '00:00');
+    expect(find.text('999'), findsNothing);
+    expect(find.text('128'), findsNothing);
+  });
+
+  testWidgets('overlay restart uses the same confirmation dialog', (
+    tester,
+  ) async {
+    final lost = TwentyFortyEightGameState.debug(
+      tiles: _boardFromValues([
+        [2, 4, 2, 4],
+        [4, 2, 4, 2],
+        [2, 4, 2, 4],
+        [4, 2, 4, 2],
+      ]),
+      score: 240,
+      moveCount: 40,
+      status: TwentyFortyEightStatus.lost,
+    );
+
+    await tester.pumpWidget(_buildHarness(state: lost));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Restart'));
+    await tester.tap(find.text('Restart'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Start new game?'), findsOneWidget);
+    expect(find.text('Current progress will be lost.'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    _expectHeaderStats(score: 240, best: 0, moves: 40, time: '00:00');
   });
 }

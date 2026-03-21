@@ -7,6 +7,8 @@ import 'package:classic_suite/games/klondike/card_model.dart';
 import 'package:classic_suite/games/klondike/game_state.dart';
 import 'package:classic_suite/games/klondike/klondike_advisor.dart';
 import 'package:classic_suite/games/klondike/klondike_game.dart';
+import 'package:classic_suite/games/klondike/solver.dart';
+import 'package:classic_suite/games/klondike/winnable_seed_data.dart';
 import 'package:classic_suite/main.dart';
 import 'package:classic_suite/shared/game_definition.dart';
 import 'package:playing_cards/playing_cards.dart';
@@ -26,6 +28,36 @@ Widget _buildLauncherHarness() {
       ],
     ),
   );
+}
+
+Future<void> _launchKlondikeFromApp(WidgetTester tester) async {
+  await tester.pumpWidget(const ClassicSuiteApp());
+  await tester.tap(find.text('Klondike Solitaire'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _applyKlondikeSettings(
+  WidgetTester tester, {
+  required String drawMode,
+  required String dealType,
+}) async {
+  await tester.tap(find.byIcon(Icons.settings));
+  await tester.pumpAndSettle();
+
+  await tester.tap(find.text(drawMode));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(dealType));
+  await tester.pumpAndSettle();
+
+  await tester.tap(find.text('Apply and deal'));
+  await tester.pumpAndSettle();
+}
+
+Future<GameState> _readSavedKlondikeState() async {
+  final prefs = await SharedPreferences.getInstance();
+  final savedState = GameState.tryDecode(prefs.getString(GameState.storageKey));
+  expect(savedState, isNotNull);
+  return savedState!;
 }
 
 void main() {
@@ -93,6 +125,56 @@ void main() {
 
     expect(find.byKey(const Key('stock')), findsOneWidget);
     expect(find.byType(GestureDetector), findsWidgets);
+  });
+
+  testWidgets(
+    'default Klondike launch persists a solvable draw-one winning deal',
+    (WidgetTester tester) async {
+      await _launchKlondikeFromApp(tester);
+
+      final savedState = await _readSavedKlondikeState();
+
+      expect(savedState.drawCount, 1);
+      expect(savedState.currentSeed, isNotNull);
+      expect(kWinnableDrawOneSeeds, contains(savedState.currentSeed));
+      expect(KlondikeSolver().isSolvable(savedState), isTrue);
+    },
+  );
+
+  testWidgets('Klondike settings can deal a solvable draw-three winning game', (
+    WidgetTester tester,
+  ) async {
+    await _launchKlondikeFromApp(tester);
+    await _applyKlondikeSettings(
+      tester,
+      drawMode: '3-card draw',
+      dealType: 'Winning deal',
+    );
+
+    final savedState = await _readSavedKlondikeState();
+
+    expect(savedState.drawCount, 3);
+    expect(savedState.currentSeed, isNotNull);
+    expect(kWinnableDrawThreeSeeds, contains(savedState.currentSeed));
+    expect(KlondikeSolver().isSolvable(savedState), isTrue);
+  });
+
+  testWidgets('Klondike settings can deal a fresh random game', (
+    WidgetTester tester,
+  ) async {
+    await _launchKlondikeFromApp(tester);
+    await _applyKlondikeSettings(
+      tester,
+      drawMode: '1-card draw',
+      dealType: 'Random deal',
+    );
+
+    final savedState = await _readSavedKlondikeState();
+
+    expect(savedState.currentSeed, isNull);
+    expect(savedState.stock, hasLength(24));
+    expect(savedState.waste, isEmpty);
+    expect(savedState.foundations.every((pile) => pile.isEmpty), isTrue);
   });
 
   testWidgets('tap stock draws a card into waste', (WidgetTester tester) async {

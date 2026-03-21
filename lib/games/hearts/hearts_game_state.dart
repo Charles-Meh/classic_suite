@@ -498,12 +498,19 @@ class HeartsGameState {
       nextHands[receiver] = _sortHand(nextHands[receiver]);
     }
 
+    // Recalculate leader: the 2♣ may have moved during the pass.
+    final newLeader = nextHands.indexWhere(
+      (hand) =>
+          hand.any((card) => card.suit == HeartsSuit.clubs && card.rank == 2),
+    );
+
     return copyWith(
       hands: nextHands,
       phase: HeartsPhase.playing,
       selectedPassCards: <String>{},
-      message:
-          '$passDirectionLabel. ${playerLabel(currentPlayer)} leads with 2♣.',
+      currentPlayer: newLeader,
+      trickLeader: newLeader,
+      message: '$passDirectionLabel. ${playerLabel(newLeader)} leads with 2♣.',
     );
   }
 

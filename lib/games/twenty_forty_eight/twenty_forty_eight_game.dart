@@ -165,6 +165,30 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
     await _applyState(TwentyFortyEightGameState.newGame());
   }
 
+  Future<void> _confirmStartNewGame() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start new game?'),
+        content: const Text('Current progress will be lost.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('New Game'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _startNewGame();
+    }
+  }
+
   Future<void> _handleUndo() async {
     await _applyState(state.undo());
   }
@@ -289,15 +313,19 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Score ${state.score} • Best ${_stats.bestScore}',
-              key: const Key('2048_score_label'),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 14),
             GameStatsRow(
               dark: false,
               items: [
+                GameStatItem(
+                  label: 'Score',
+                  value: '${state.score}',
+                  icon: Icons.star_outline_rounded,
+                ),
+                GameStatItem(
+                  label: 'Best',
+                  value: '${_stats.bestScore}',
+                  icon: Icons.emoji_events_outlined,
+                ),
                 GameStatItem(
                   label: 'Moves',
                   value: '${state.moveCount}',
@@ -309,15 +337,6 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                   icon: Icons.timer_outlined,
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            AnimatedSwitcher(
-              duration: kCardHighlightDuration,
-              child: Text(
-                state.message,
-                key: ValueKey<String>(state.message),
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
             ),
             if (state.hasWon && !state.keepGoing) ...[
               const SizedBox(height: 12),
@@ -457,7 +476,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                                         child: const Text('Resume'),
                                       ),
                                     OutlinedButton(
-                                      onPressed: _startNewGame,
+                                      onPressed: _confirmStartNewGame,
                                       child: const Text('Restart'),
                                     ),
                                   ],
@@ -505,7 +524,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
           icon: Icons.auto_awesome,
         ),
       ],
-      onNewGame: _startNewGame,
+      onNewGame: _confirmStartNewGame,
       onBackToMenu: _backToMenu,
       newGameLabel: 'New Run',
     );
@@ -538,7 +557,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
               undoEnabled: state.canUndo,
               onHint: null,
               showHintButton: false,
-              onNewDeal: _startNewGame,
+              onNewDeal: _confirmStartNewGame,
               onStatistics: _showStatistics,
               newDealLabel: 'New Game',
             ),

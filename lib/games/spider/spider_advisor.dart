@@ -4,7 +4,7 @@ import '../klondike/card_model.dart';
 import '../klondike/klondike_advisor.dart';
 import 'spider_game_state.dart';
 
-enum SpiderSuggestionKind { moveRun, dealFromStock, noMoves }
+enum SpiderSuggestionKind { moveRun, useEmptyTableau, dealFromStock, noMoves }
 
 class SpiderSuggestion {
   const SpiderSuggestion({
@@ -54,7 +54,12 @@ class SpiderAdvisor {
         if (!state.canPickUpRun(pileIndex, cardIndex)) {
           continue;
         }
-        final suggestion = _bestMoveForRun(state, pileIndex, cardIndex);
+        final suggestion = _bestMoveForRun(
+          state,
+          pileIndex,
+          cardIndex,
+          includeEmptyTargets: false,
+        );
         if (suggestion == null) {
           continue;
         }
@@ -68,6 +73,15 @@ class SpiderAdvisor {
 
     if (bestMove != null) {
       return bestMove;
+    }
+
+    final emptyPileIndex = _firstEmptyTableauIndex(state);
+    if (emptyPileIndex != null && _hasMovableRun(state)) {
+      return SpiderSuggestion(
+        kind: SpiderSuggestionKind.useEmptyTableau,
+        targetPileIndex: emptyPileIndex,
+        message: 'Use the open tableau column for any movable run.',
+      );
     }
 
     if (state.canDealFromStock) {
@@ -93,8 +107,9 @@ class SpiderAdvisor {
   static SpiderSuggestion? _bestMoveForRun(
     SpiderGameState state,
     int sourcePileIndex,
-    int sourceCardIndex,
-  ) {
+    int sourceCardIndex, {
+    bool includeEmptyTargets = true,
+  }) {
     final cards = state.runAt(sourcePileIndex, sourceCardIndex);
     if (cards.isEmpty) {
       return null;
@@ -111,6 +126,9 @@ class SpiderAdvisor {
         continue;
       }
       final targetPile = state.tableau[targetPileIndex];
+      if (!includeEmptyTargets && targetPile.isEmpty) {
+        continue;
+      }
       if (!state.canMoveCardsToTableau(cards, targetPile)) {
         continue;
       }
@@ -200,6 +218,27 @@ class SpiderAdvisor {
 
   static int _supportQuality(KlondikeCard supportCard, KlondikeCard movedCard) {
     return supportCard.card.suit == movedCard.card.suit ? 1 : 0;
+  }
+
+  static int? _firstEmptyTableauIndex(SpiderGameState state) {
+    for (int index = 0; index < state.tableau.length; index++) {
+      if (state.tableau[index].isEmpty) {
+        return index;
+      }
+    }
+    return null;
+  }
+
+  static bool _hasMovableRun(SpiderGameState state) {
+    for (int pileIndex = 0; pileIndex < state.tableau.length; pileIndex++) {
+      final pile = state.tableau[pileIndex];
+      for (int cardIndex = 0; cardIndex < pile.length; cardIndex++) {
+        if (state.canPickUpRun(pileIndex, cardIndex)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   static String _runLabel(List<KlondikeCard> cards) {
