@@ -96,7 +96,7 @@ class _TriPeaksGameState extends State<TriPeaksGame>
     setState(() {
       if (loaded != null) {
         state = loaded;
-        _initialDealState = loaded.copyWith();
+        _initialDealState = state.copyWith();
         _history
           ..clear()
           ..addAll(history);
@@ -220,6 +220,29 @@ class _TriPeaksGameState extends State<TriPeaksGame>
     await _applyState(fresh);
   }
 
+  Future<void> _confirmNewDeal() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Start new game?'),
+        content: const Text('Current progress will be lost.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('New Game'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _newGame();
+    }
+  }
+
   Future<void> _restartDeal() async {
     if (!_hasRecordedResult) {
       final nextStats = _stats.recordLoss(longestRun: state.longestRun);
@@ -245,10 +268,6 @@ class _TriPeaksGameState extends State<TriPeaksGame>
     _redoHistory.add(state.copyWith());
     _hasRecordedResult = previous.isWon || previous.isLost;
     await _applyState(previous);
-  }
-
-  Future<void> _togglePaused() async {
-    await _applyState(state.togglePaused());
   }
 
   Future<void> _drawFromStock() async {
@@ -536,7 +555,7 @@ class _TriPeaksGameState extends State<TriPeaksGame>
         : const ValueKey<String>('tripeaks_stock_idle');
     return GestureDetector(
       key: const Key('tripeaks_stock'),
-      onTap: state.stock.isEmpty || state.paused || state.isWon || state.isLost
+      onTap: state.stock.isEmpty || state.isWon || state.isLost
           ? null
           : _drawFromStock,
       child: AnimatedContainer(
@@ -683,24 +702,15 @@ class _TriPeaksGameState extends State<TriPeaksGame>
   }
 
   Widget _buildOverlay(_TriPeaksMetrics metrics) {
-    final Color tint;
-    final String title;
-    final String subtitle;
-    final IconData icon;
-
-    if (state.paused) {
-      tint = Colors.black.withValues(alpha: 0.42);
-      title = 'Paused';
-      subtitle = 'Tap play to resume your current deal.';
-      icon = Icons.pause_circle_filled;
-    } else if (state.isWon) {
+    if (state.isWon) {
       return _buildWinOverlay();
-    } else {
-      tint = const Color(0x88B3261E);
-      title = 'No moves left';
-      subtitle = 'Draws are gone too. Start a fresh deal or restart this one.';
-      icon = Icons.info_outline;
     }
+
+    const tint = Color(0x88B3261E);
+    const title = 'No moves left';
+    const subtitle =
+        'Draws are gone too. Start a fresh deal or restart this one.';
+    const icon = Icons.info_outline;
 
     return Positioned.fill(
       child: Container(
@@ -727,19 +737,11 @@ class _TriPeaksGameState extends State<TriPeaksGame>
                 runSpacing: 8,
                 alignment: WrapAlignment.center,
                 children: [
-                  if (state.paused)
-                    FilledButton.icon(
-                      key: const Key('tripeaks_overlay_resume'),
-                      onPressed: _togglePaused,
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Resume'),
-                    ),
-                  if (!state.paused)
-                    FilledButton.icon(
-                      onPressed: _newGame,
-                      icon: const Icon(Icons.casino_outlined),
-                      label: const Text('New game'),
-                    ),
+                  FilledButton.icon(
+                    onPressed: _newGame,
+                    icon: const Icon(Icons.casino_outlined),
+                    label: const Text('New game'),
+                  ),
                   OutlinedButton.icon(
                     key: const Key('tripeaks_overlay_stats'),
                     onPressed: _showStatistics,
@@ -767,26 +769,21 @@ class _TriPeaksGameState extends State<TriPeaksGame>
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         centerTitle: true,
         title: const Text('TriPeaks Solitaire'),
-        actions: [
-          IconButton(
-            tooltip: 'Help',
-            onPressed: _showHowToPlay,
-            icon: const Icon(Icons.help_outline),
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: _showStatistics,
-            icon: const Icon(Icons.settings),
-          ),
-        ],
+        actions: buildGameAppBarActions(
+          onHelp: _showHowToPlay,
+          showSettings: false,
+        ),
       ),
       bottomNavigationBar: GameBottomBar(
         onUndo: _history.isEmpty ? null : _undo,
         undoEnabled: _history.isNotEmpty,
         onHint: _showHint,
         hintEnabled: state.isActive,
-        onNewDeal: _newGame,
+        onNewDeal: _confirmNewDeal,
         onStatistics: _showStatistics,
+        backgroundColor: const Color(0xFF14532D),
+        borderColor: Colors.white24,
+        shadowColor: const Color(0x33000000),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -831,8 +828,7 @@ class _TriPeaksGameState extends State<TriPeaksGame>
                             ),
                           ),
                         ),
-                        if (state.paused || state.isWon || state.isLost)
-                          _buildOverlay(metrics),
+                        if (state.isWon || state.isLost) _buildOverlay(metrics),
                       ],
                     );
                   },

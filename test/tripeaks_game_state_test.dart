@@ -130,15 +130,12 @@ void main() {
   });
 
   test('encode and decode round-trip preserves state', () {
-    final original = TriPeaksGameState.newGame(
-      seed: 42,
-    ).withElapsedSeconds(31).togglePaused();
+    final original = TriPeaksGameState.newGame(seed: 42).withElapsedSeconds(31);
 
     final decoded = TriPeaksGameState.tryDecode(original.encode());
 
     expect(decoded, isNotNull);
     expect(decoded!.elapsedSeconds, 31);
-    expect(decoded.paused, isTrue);
     expect(decoded.seed, original.seed);
     expect(decoded.stock.length, original.stock.length);
     expect(decoded.tableau.whereType<TriPeaksCard>().length, 28);

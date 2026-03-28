@@ -3,7 +3,7 @@ import 'dart:math';
 
 enum MoveDirection { up, down, left, right }
 
-enum TwentyFortyEightStatus { ready, playing, won, lost, paused }
+enum TwentyFortyEightStatus { ready, playing, won, lost }
 
 class TwentyFortyEightTile {
   const TwentyFortyEightTile({
@@ -72,8 +72,8 @@ class TwentyFortyEightTile {
       column: (json['column'] as num).toInt(),
       previousRow: (json['previousRow'] as num?)?.toInt(),
       previousColumn: (json['previousColumn'] as num?)?.toInt(),
-      isNew: json['isNew'] as bool? ?? false,
-      isMerged: json['isMerged'] as bool? ?? false,
+      isNew: json['isNew'] as bool,
+      isMerged: json['isMerged'] as bool,
     );
   }
 }
@@ -115,25 +115,22 @@ class TwentyFortyEightSnapshot {
 
   factory TwentyFortyEightSnapshot.fromJson(Map<String, dynamic> json) {
     return TwentyFortyEightSnapshot(
-      tiles: (json['tiles'] as List<dynamic>? ?? const [])
+      tiles: (json['tiles'] as List<dynamic>)
           .map(
             (tile) =>
                 TwentyFortyEightTile.fromJson(tile as Map<String, dynamic>),
           )
           .toList(),
-      score: (json['score'] as num?)?.toInt() ?? 0,
-      moveCount: (json['moveCount'] as num?)?.toInt() ?? 0,
-      hasWon: json['hasWon'] as bool? ?? false,
-      keepGoing: json['keepGoing'] as bool? ?? false,
-      status: TwentyFortyEightStatus.values.firstWhere(
-        (value) => value.name == (json['status'] as String? ?? 'ready'),
-        orElse: () => TwentyFortyEightStatus.ready,
-      ),
-      nextTileId: (json['nextTileId'] as num?)?.toInt() ?? 3,
+      score: (json['score'] as num).toInt(),
+      moveCount: (json['moveCount'] as num).toInt(),
+      hasWon: json['hasWon'] as bool,
+      keepGoing: json['keepGoing'] as bool,
+      status: TwentyFortyEightStatus.values.byName(json['status'] as String),
+      nextTileId: (json['nextTileId'] as num).toInt(),
       startedAt: json['startedAt'] == null
           ? null
           : DateTime.tryParse(json['startedAt'] as String),
-      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
+      elapsedSeconds: (json['elapsedSeconds'] as num).toInt(),
     );
   }
 }
@@ -234,32 +231,29 @@ class TwentyFortyEightGameState {
 
   factory TwentyFortyEightGameState.fromJson(Map<String, dynamic> json) {
     return TwentyFortyEightGameState._(
-      tiles: (json['tiles'] as List<dynamic>? ?? const [])
+      tiles: (json['tiles'] as List<dynamic>)
           .map(
             (tile) =>
                 TwentyFortyEightTile.fromJson(tile as Map<String, dynamic>),
           )
           .toList(),
-      score: (json['score'] as num?)?.toInt() ?? 0,
-      moveCount: (json['moveCount'] as num?)?.toInt() ?? 0,
-      hasWon: json['hasWon'] as bool? ?? false,
-      keepGoing: json['keepGoing'] as bool? ?? false,
-      status: TwentyFortyEightStatus.values.firstWhere(
-        (value) => value.name == (json['status'] as String? ?? 'ready'),
-        orElse: () => TwentyFortyEightStatus.ready,
-      ),
-      undoStack: (json['undoStack'] as List<dynamic>? ?? const [])
+      score: (json['score'] as num).toInt(),
+      moveCount: (json['moveCount'] as num).toInt(),
+      hasWon: json['hasWon'] as bool,
+      keepGoing: json['keepGoing'] as bool,
+      status: TwentyFortyEightStatus.values.byName(json['status'] as String),
+      undoStack: (json['undoStack'] as List<dynamic>)
           .map(
             (entry) => TwentyFortyEightSnapshot.fromJson(
               entry as Map<String, dynamic>,
             ),
           )
           .toList(),
-      nextTileId: (json['nextTileId'] as num?)?.toInt() ?? 3,
+      nextTileId: (json['nextTileId'] as num).toInt(),
       startedAt: json['startedAt'] == null
           ? null
           : DateTime.tryParse(json['startedAt'] as String),
-      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
+      elapsedSeconds: (json['elapsedSeconds'] as num).toInt(),
     );
   }
 
@@ -292,7 +286,6 @@ class TwentyFortyEightGameState {
   String encode() => jsonEncode(toJson());
 
   bool get canUndo => undoStack.isNotEmpty;
-  bool get isPaused => status == TwentyFortyEightStatus.paused;
   bool get isLost => status == TwentyFortyEightStatus.lost;
   bool get isWon => hasWon && !keepGoing;
   bool get isActive => status == TwentyFortyEightStatus.playing;
@@ -356,9 +349,7 @@ class TwentyFortyEightGameState {
       moveCount: snapshot.moveCount,
       hasWon: snapshot.hasWon,
       keepGoing: snapshot.keepGoing,
-      status: snapshot.status == TwentyFortyEightStatus.paused
-          ? TwentyFortyEightStatus.playing
-          : snapshot.status,
+      status: snapshot.status,
       undoStack: undoStack.sublist(0, undoStack.length - 1),
       nextTileId: snapshot.nextTileId,
       startedAt: snapshot.startedAt,
@@ -413,24 +404,6 @@ class TwentyFortyEightGameState {
     return copyWith(elapsedSeconds: elapsedSeconds + 1);
   }
 
-  TwentyFortyEightGameState pause() {
-    if (isPaused || isGameOver) {
-      return this;
-    }
-    return copyWith(status: TwentyFortyEightStatus.paused);
-  }
-
-  TwentyFortyEightGameState resume() {
-    if (!isPaused) {
-      return this;
-    }
-    return copyWith(
-      status: canMove
-          ? TwentyFortyEightStatus.playing
-          : TwentyFortyEightStatus.lost,
-    );
-  }
-
   TwentyFortyEightGameState continuePast2048() {
     if (!hasWon) {
       return this;
@@ -444,7 +417,7 @@ class TwentyFortyEightGameState {
   }
 
   TwentyFortyEightMoveResult move(MoveDirection direction, {int? seed}) {
-    if (isPaused || isLost || (hasWon && !keepGoing)) {
+    if (isLost || (hasWon && !keepGoing)) {
       return TwentyFortyEightMoveResult(state: this, changed: false);
     }
 

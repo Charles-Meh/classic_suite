@@ -72,18 +72,21 @@ class SpiderGameState {
 
   factory SpiderGameState.fromJson(Map<String, dynamic> json) {
     final state = SpiderGameState._fromSnapshot(
-      suitMode: (json['suitMode'] as num?)?.toInt() ?? 1,
+      suitMode: (json['suitMode'] as num).toInt(),
       currentSeed: (json['currentSeed'] as num?)?.toInt(),
-      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
-      moveCount: (json['moveCount'] as num?)?.toInt() ?? 0,
-      score: (json['score'] as num?)?.toInt() ?? 500,
+      elapsedSeconds: (json['elapsedSeconds'] as num).toInt(),
+      moveCount: (json['moveCount'] as num).toInt(),
+      score: (json['score'] as num).toInt(),
     );
-    state._replaceFromJsonPile(state.stock, json['stock']);
-    state._replacePileListFromJson(state.tableau, json['tableau']);
+    state._replaceFromJsonPile(state.stock, json['stock'] as List<dynamic>);
+    state._replacePileListFromJson(
+      state.tableau,
+      json['tableau'] as List<dynamic>,
+    );
     state.completedRuns
       ..clear()
       ..addAll(
-        ((json['completedRuns'] as List<dynamic>?) ?? const [])
+        (json['completedRuns'] as List<dynamic>)
             .map((pile) => state._decodePile(pile))
             .toList(),
       );
@@ -98,9 +101,6 @@ class SpiderGameState {
       final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) {
         return SpiderGameState.fromJson(decoded);
-      }
-      if (decoded is Map) {
-        return SpiderGameState.fromJson(decoded.cast<String, dynamic>());
       }
     } catch (_) {
       return null;
@@ -336,13 +336,14 @@ class SpiderGameState {
   }
 
   List<KlondikeCard> _decodePile(dynamic pile) {
-    return ((pile as List<dynamic>?) ?? const [])
-        .whereType<Map>()
-        .map((card) => decodeKlondikeCard(card.cast<String, dynamic>()))
+    return (pile as List<dynamic>)
+        .map(
+          (card) => decodeKlondikeCard((card as Map).cast<String, dynamic>()),
+        )
         .toList();
   }
 
-  void _replaceFromJsonPile(List<KlondikeCard> target, dynamic source) {
+  void _replaceFromJsonPile(List<KlondikeCard> target, List<dynamic> source) {
     target
       ..clear()
       ..addAll(_decodePile(source));
@@ -350,11 +351,13 @@ class SpiderGameState {
 
   void _replacePileListFromJson(
     List<List<KlondikeCard>> target,
-    dynamic source,
+    List<dynamic> source,
   ) {
-    final piles = source as List<dynamic>? ?? const [];
+    if (source.length != target.length) {
+      throw const FormatException('Invalid Spider pile list payload.');
+    }
     for (int i = 0; i < target.length; i++) {
-      _replaceFromJsonPile(target[i], i < piles.length ? piles[i] : null);
+      _replaceFromJsonPile(target[i], source[i] as List<dynamic>);
     }
   }
 

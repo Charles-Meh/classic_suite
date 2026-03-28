@@ -30,7 +30,7 @@ class ChessAi {
   }
 
   int _search(ChessGameState state, int depth, int alpha, int beta) {
-    if (depth <= 0 || state.isFinished || state.isPaused) {
+    if (depth <= 0 || state.isFinished) {
       return _evaluate(state);
     }
     final legal = state.legalMoves;

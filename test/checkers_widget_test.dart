@@ -22,7 +22,11 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: CheckersGame()));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('checkers_title')), findsOneWidget);
+    expect(find.text('Time'), findsOneWidget);
+    expect(find.text('Moves'), findsOneWidget);
     expect(find.text('00:33'), findsOneWidget);
     expect(find.text('Red piece selected.'), findsOneWidget);
+    expect(find.byKey(const Key('checkers_pause')), findsNothing);
   });
 }

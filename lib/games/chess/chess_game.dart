@@ -121,7 +121,7 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
 
   void _syncTimers() {
     _ticker?.cancel();
-    if (_loading || state.isPaused || state.isFinished) return;
+    if (_loading || state.isFinished) return;
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!mounted) return;
       setState(() => state = state.incrementElapsed());
@@ -131,7 +131,7 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
 
   void _maybeRunAi() {
     _aiTimer?.cancel();
-    if (!mounted || _loading || state.isPaused || state.isFinished) return;
+    if (!mounted || _loading || state.isFinished) return;
     if (state.mode != ChessGameMode.vsAi || state.turn != ChessSide.black) {
       return;
     }
@@ -189,7 +189,7 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
   }
 
   Future<void> _undo() async {
-    if (_undoStack.isEmpty || state.isPaused) return;
+    if (_undoStack.isEmpty) return;
     var previous = _undoStack.removeLast();
     if (state.mode == ChessGameMode.vsAi &&
         previous.turn == ChessSide.black &&
@@ -448,7 +448,7 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
                       'Castling, en passant, and automatic queen promotion are supported.',
                       'Easy/Medium/Hard change AI search depth: 2 / 4 / 6 plies.',
                       'Undo steps back one full turn against the AI, or one move in pass-and-play.',
-                      'The game auto-saves, so pause and resume works naturally when you leave and come back.',
+                      'The game auto-saves when you leave and restores when you come back.',
                     ],
                   ),
                 ],
@@ -474,11 +474,16 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              state.mode == ChessGameMode.vsAi
-                  ? 'Chess • ${state.difficulty.label} AI'
-                  : 'Chess • Pass & play',
+              'Chess',
               key: const Key('chess_title'),
               style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              state.mode == ChessGameMode.vsAi
+                  ? '${state.difficulty.label} AI'
+                  : 'Pass & play',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
             GameStatsRow(
@@ -598,52 +603,6 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildHistory(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Move history',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            if (state.moveHistory.isEmpty)
-              Text(
-                'No moves yet.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              )
-            else
-              SizedBox(
-                height: 220,
-                child: ListView.builder(
-                  itemCount: (state.moveHistory.length / 2).ceil(),
-                  itemBuilder: (context, index) {
-                    final white = state.moveHistory[index * 2];
-                    final black = index * 2 + 1 < state.moveHistory.length
-                        ? state.moveHistory[index * 2 + 1]
-                        : null;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          SizedBox(width: 36, child: Text('${index + 1}.')),
-                          Expanded(child: Text(white.notation)),
-                          Expanded(child: Text(black?.notation ?? '')),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   bool get _playerWon => state.status == ChessGameStatus.whiteWon;
 
   void _backToMenu() {
@@ -685,18 +644,10 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
         leading: const BackButton(),
         centerTitle: true,
         title: const Text('Chess'),
-        actions: [
-          IconButton(
-            tooltip: 'Help',
-            onPressed: _showHelp,
-            icon: const Icon(Icons.help_outline_rounded),
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: _showSettings,
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
+        actions: buildGameAppBarActions(
+          onHelp: _showHelp,
+          onSettings: _showSettings,
+        ),
       ),
       bottomNavigationBar: _loading
           ? null
@@ -717,7 +668,7 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
                   SingleChildScrollView(
                     child: Center(
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1250),
+                        constraints: const BoxConstraints(maxWidth: 980),
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Column(
@@ -726,8 +677,6 @@ class _ChessGameState extends State<ChessGame> with WidgetsBindingObserver {
                               _buildTopPanel(context),
                               const SizedBox(height: 16),
                               _buildBoard(context),
-                              const SizedBox(height: 16),
-                              _buildHistory(context),
                             ],
                           ),
                         ),

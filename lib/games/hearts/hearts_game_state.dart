@@ -52,11 +52,8 @@ class HeartsCard {
 
   factory HeartsCard.fromJson(Map<String, dynamic> json) {
     return HeartsCard(
-      HeartsSuit.values.firstWhere(
-        (value) => value.name == (json['suit'] as String? ?? 'clubs'),
-        orElse: () => HeartsSuit.clubs,
-      ),
-      (json['rank'] as num?)?.toInt() ?? 2,
+      HeartsSuit.values.byName(json['suit'] as String),
+      (json['rank'] as num).toInt(),
     );
   }
 }
@@ -71,7 +68,7 @@ class HeartsTrickPlay {
 
   factory HeartsTrickPlay.fromJson(Map<String, dynamic> json) {
     return HeartsTrickPlay(
-      player: (json['player'] as num?)?.toInt() ?? 0,
+      player: (json['player'] as num).toInt(),
       card: HeartsCard.fromJson(json['card'] as Map<String, dynamic>),
     );
   }
@@ -96,11 +93,11 @@ class HeartsTrick {
 
   factory HeartsTrick.fromJson(Map<String, dynamic> json) {
     return HeartsTrick(
-      plays: (json['plays'] as List<dynamic>? ?? const [])
+      plays: (json['plays'] as List<dynamic>)
           .map((item) => HeartsTrickPlay.fromJson(item as Map<String, dynamic>))
           .toList(),
-      winner: (json['winner'] as num?)?.toInt() ?? 0,
-      points: (json['points'] as num?)?.toInt() ?? 0,
+      winner: (json['winner'] as num).toInt(),
+      points: (json['points'] as num).toInt(),
     );
   }
 }
@@ -120,7 +117,6 @@ class HeartsGameState {
     required this.heartsBroken,
     required this.phase,
     required this.handNumber,
-    required this.isPaused,
     required this.speed,
     required this.message,
     required this.lastRoundAppliedScores,
@@ -144,7 +140,6 @@ class HeartsGameState {
   final bool heartsBroken;
   final HeartsPhase phase;
   final int handNumber;
-  final bool isPaused;
   final HeartsSpeed speed;
   final String message;
   final List<int>? lastRoundAppliedScores;
@@ -173,7 +168,6 @@ class HeartsGameState {
     bool heartsBroken = false,
     HeartsPhase phase = HeartsPhase.playing,
     int handNumber = 0,
-    bool isPaused = false,
     HeartsSpeed speed = HeartsSpeed.instant,
     String message = 'Debug hand',
     List<int>? lastRoundAppliedScores,
@@ -199,7 +193,6 @@ class HeartsGameState {
       heartsBroken: heartsBroken,
       phase: phase,
       handNumber: handNumber,
-      isPaused: isPaused,
       speed: speed,
       message: message,
       lastRoundAppliedScores: lastRoundAppliedScores == null
@@ -211,7 +204,7 @@ class HeartsGameState {
 
   factory HeartsGameState.fromJson(Map<String, dynamic> json) {
     return HeartsGameState._(
-      hands: (json['hands'] as List<dynamic>? ?? const [])
+      hands: (json['hands'] as List<dynamic>)
           .map(
             (hand) => (hand as List<dynamic>)
                 .map(
@@ -223,35 +216,26 @@ class HeartsGameState {
       matchScores: _intList(json['matchScores'], fallbackLength: 4),
       handPoints: _intList(json['handPoints'], fallbackLength: 4),
       tricksWon: _intList(json['tricksWon'], fallbackLength: 4),
-      currentTrick: (json['currentTrick'] as List<dynamic>? ?? const [])
+      currentTrick: (json['currentTrick'] as List<dynamic>)
           .map((item) => HeartsTrickPlay.fromJson(item as Map<String, dynamic>))
           .toList(),
-      completedTricks: (json['completedTricks'] as List<dynamic>? ?? const [])
+      completedTricks: (json['completedTricks'] as List<dynamic>)
           .map((item) => HeartsTrick.fromJson(item as Map<String, dynamic>))
           .toList(),
-      currentPlayer: (json['currentPlayer'] as num?)?.toInt() ?? 0,
-      trickLeader: (json['trickLeader'] as num?)?.toInt() ?? 0,
-      passDirection: HeartsPassDirection.values.firstWhere(
-        (value) => value.name == (json['passDirection'] as String? ?? 'left'),
-        orElse: () => HeartsPassDirection.left,
+      currentPlayer: (json['currentPlayer'] as num).toInt(),
+      trickLeader: (json['trickLeader'] as num).toInt(),
+      passDirection: HeartsPassDirection.values.byName(
+        json['passDirection'] as String,
       ),
       selectedPassCards: {
-        for (final item
-            in (json['selectedPassCards'] as List<dynamic>? ?? const []))
+        for (final item in (json['selectedPassCards'] as List<dynamic>))
           '$item',
       },
-      heartsBroken: json['heartsBroken'] as bool? ?? false,
-      phase: HeartsPhase.values.firstWhere(
-        (value) => value.name == (json['phase'] as String? ?? 'passing'),
-        orElse: () => HeartsPhase.passing,
-      ),
-      handNumber: (json['handNumber'] as num?)?.toInt() ?? 0,
-      isPaused: json['isPaused'] as bool? ?? false,
-      speed: HeartsSpeed.values.firstWhere(
-        (value) => value.name == (json['speed'] as String? ?? 'normal'),
-        orElse: () => HeartsSpeed.normal,
-      ),
-      message: json['message'] as String? ?? 'Welcome to Hearts.',
+      heartsBroken: json['heartsBroken'] as bool,
+      phase: HeartsPhase.values.byName(json['phase'] as String),
+      handNumber: (json['handNumber'] as num).toInt(),
+      speed: HeartsSpeed.values.byName(json['speed'] as String),
+      message: json['message'] as String,
       lastRoundAppliedScores: json['lastRoundAppliedScores'] == null
           ? null
           : _intList(json['lastRoundAppliedScores'], fallbackLength: 4),
@@ -288,7 +272,6 @@ class HeartsGameState {
     'heartsBroken': heartsBroken,
     'phase': phase.name,
     'handNumber': handNumber,
-    'isPaused': isPaused,
     'speed': speed.name,
     'message': message,
     'lastRoundAppliedScores': lastRoundAppliedScores,
@@ -296,13 +279,13 @@ class HeartsGameState {
   };
 
   static List<int> _intList(Object? value, {required int fallbackLength}) {
-    final list = (value as List<dynamic>? ?? const [])
+    final list = (value as List<dynamic>)
         .map((item) => (item as num).toInt())
         .toList();
     if (list.length == fallbackLength) {
       return list;
     }
-    return List<int>.filled(fallbackLength, 0);
+    throw const FormatException('Invalid Hearts integer list payload.');
   }
 
   HeartsGameState copyWith({
@@ -319,7 +302,6 @@ class HeartsGameState {
     bool? heartsBroken,
     HeartsPhase? phase,
     int? handNumber,
-    bool? isPaused,
     HeartsSpeed? speed,
     String? message,
     List<int>? lastRoundAppliedScores,
@@ -341,7 +323,6 @@ class HeartsGameState {
       heartsBroken: heartsBroken ?? this.heartsBroken,
       phase: phase ?? this.phase,
       handNumber: handNumber ?? this.handNumber,
-      isPaused: isPaused ?? this.isPaused,
       speed: speed ?? this.speed,
       message: message ?? this.message,
       lastRoundAppliedScores: lastRoundAppliedScores == null
@@ -420,13 +401,6 @@ class HeartsGameState {
     return legalPlaysFor(
       humanPlayer,
     ).any((candidate) => candidate.key == card.key);
-  }
-
-  HeartsGameState togglePause() {
-    return copyWith(
-      isPaused: !isPaused,
-      message: !isPaused ? 'Game paused.' : 'Game resumed.',
-    );
   }
 
   HeartsGameState setSpeed(HeartsSpeed nextSpeed) {
@@ -515,7 +489,7 @@ class HeartsGameState {
   }
 
   HeartsGameState playHumanCard(String cardKey) {
-    if (!isHumanTurn || isPaused) {
+    if (!isHumanTurn) {
       return this;
     }
     final card = hands[humanPlayer].firstWhere(
@@ -529,7 +503,7 @@ class HeartsGameState {
   }
 
   HeartsGameState autoPlayCurrentPlayer() {
-    if (!isPlaying || isPaused || currentPlayer == humanPlayer) {
+    if (!isPlaying || currentPlayer == humanPlayer) {
       return this;
     }
     final choice = HeartsAi.chooseCard(this, currentPlayer);
@@ -719,7 +693,6 @@ class HeartsGameState {
           ? HeartsPhase.playing
           : HeartsPhase.passing,
       handNumber: handNumber,
-      isPaused: false,
       speed: speed,
       message: passDirection == HeartsPassDirection.hold
           ? 'Hold hand. ${leader == 0 ? 'You lead 2♣.' : 'Waiting for ${switch (leader) {

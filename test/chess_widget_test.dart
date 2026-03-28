@@ -22,7 +22,12 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: ChessGame()));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('chess_title')), findsOneWidget);
+    expect(find.text('Pass & play'), findsOneWidget);
+    expect(find.text('Time'), findsOneWidget);
+    expect(find.text('Moves'), findsOneWidget);
     expect(find.text('Saved game restored.'), findsOneWidget);
     expect(find.text('00:31'), findsOneWidget);
+    expect(find.byKey(const Key('chess_pause')), findsNothing);
   });
 }

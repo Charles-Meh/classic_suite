@@ -562,20 +562,12 @@ class _PyramidGameState extends State<PyramidGame> with WidgetsBindingObserver {
         leading: const BackButton(),
         centerTitle: true,
         title: const Text('Pyramid Solitaire'),
-        actions: [
-          IconButton(
-            key: const Key('pyramid_help_action'),
-            tooltip: 'Help',
-            onPressed: _showHowToPlay,
-            icon: const Icon(Icons.help_outline_rounded),
-          ),
-          IconButton(
-            key: const Key('pyramid_settings_action'),
-            tooltip: 'Settings',
-            onPressed: _openSettings,
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
+        actions: buildGameAppBarActions(
+          onHelp: _showHowToPlay,
+          onSettings: _openSettings,
+          helpKey: const Key('pyramid_help_action'),
+          settingsKey: const Key('pyramid_settings_action'),
+        ),
       ),
       bottomNavigationBar: _loading
           ? null

@@ -238,6 +238,74 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _showSettings() async {
+    final result = await showModalBottomSheet<SudokuDifficulty>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        var selectedDifficulty = _selectedDifficulty;
+        return StatefulBuilder(
+          builder: (context, setModalState) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Sudoku settings',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Difficulty',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final difficulty in SudokuDifficulty.values)
+                        ChoiceChip(
+                          label: Text(difficulty.label),
+                          selected: selectedDifficulty == difficulty,
+                          onSelected: (_) {
+                            setModalState(() {
+                              selectedDifficulty = difficulty;
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () =>
+                            Navigator.of(context).pop(selectedDifficulty),
+                        child: const Text('Apply'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result != null) {
+      await _handleDifficultySelection(result);
+    }
+  }
+
   Future<void> _handleDigitInput(int value) async {
     await _applyAndPersist(() {
       if (_entryMode == _SudokuEntryMode.note) {
@@ -470,18 +538,10 @@ class _SudokuGameState extends State<SudokuGame> with WidgetsBindingObserver {
         leading: const BackButton(),
         centerTitle: true,
         title: const Text('Sudoku'),
-        actions: [
-          IconButton(
-            tooltip: 'Help',
-            onPressed: _showHelp,
-            icon: const Icon(Icons.help_outline_rounded),
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: null,
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
+        actions: buildGameAppBarActions(
+          onHelp: _showHelp,
+          onSettings: _showSettings,
+        ),
       ),
       bottomNavigationBar: _loading
           ? null

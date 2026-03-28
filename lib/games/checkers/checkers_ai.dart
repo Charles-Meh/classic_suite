@@ -30,7 +30,7 @@ class CheckersAi {
   }
 
   int _search(CheckersGameState state, int depth, int alpha, int beta) {
-    if (depth <= 0 || state.isFinished || state.isPaused) {
+    if (depth <= 0 || state.isFinished) {
       return _evaluate(state);
     }
 

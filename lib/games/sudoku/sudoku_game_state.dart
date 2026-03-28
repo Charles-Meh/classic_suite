@@ -241,17 +241,26 @@ class SudokuGameState {
   }
 
   factory SudokuGameState.fromJson(Map<String, dynamic> json) {
-    final puzzleId = json['puzzleId'] as String?;
     final puzzle = puzzles.firstWhere(
-      (candidate) => candidate.id == puzzleId,
-      orElse: () => puzzles.first,
+      (candidate) => candidate.id == json['puzzleId'] as String,
     );
-    final boardJson = json['board'];
-    final board = _parseBoard(boardJson) ?? _copyBoard(puzzle.board);
-    final notesJson = json['notes'];
-    final notes = _parseNotes(notesJson) ?? _emptyNotes();
-    final selectedRow = json['selectedRow'] as int?;
-    final selectedCol = json['selectedCol'] as int?;
+    final board = _parseBoard(json['board']);
+    final notes = _parseNotes(json['notes']);
+    final selectedRow = (json['selectedRow'] as num?)?.toInt();
+    final selectedCol = (json['selectedCol'] as num?)?.toInt();
+
+    if (board == null) {
+      throw const FormatException('Invalid Sudoku board payload.');
+    }
+    if (notes == null) {
+      throw const FormatException('Invalid Sudoku notes payload.');
+    }
+    if (selectedRow != null && (selectedRow < 0 || selectedRow >= 9)) {
+      throw const FormatException('Invalid Sudoku selectedRow value.');
+    }
+    if (selectedCol != null && (selectedCol < 0 || selectedCol >= 9)) {
+      throw const FormatException('Invalid Sudoku selectedCol value.');
+    }
 
     final state = SudokuGameState._(
       puzzleId: puzzle.id,
@@ -261,15 +270,11 @@ class SudokuGameState {
       solution: _copyBoard(puzzle.solution),
       board: board,
       notes: notes,
-      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
-      selectedRow: selectedRow != null && selectedRow >= 0 && selectedRow < 9
-          ? selectedRow
-          : null,
-      selectedCol: selectedCol != null && selectedCol >= 0 && selectedCol < 9
-          ? selectedCol
-          : null,
-      completed: json['completed'] == true,
-      message: (json['message'] as String?) ?? 'Saved game restored.',
+      elapsedSeconds: (json['elapsedSeconds'] as num).toInt(),
+      selectedRow: selectedRow,
+      selectedCol: selectedCol,
+      completed: json['completed'] as bool,
+      message: json['message'] as String,
     );
 
     state._recomputeStatus();
@@ -302,9 +307,6 @@ class SudokuGameState {
       final decoded = jsonDecode(source);
       if (decoded is Map<String, dynamic>) {
         return SudokuGameState.fromJson(decoded);
-      }
-      if (decoded is Map) {
-        return SudokuGameState.fromJson(decoded.cast<String, dynamic>());
       }
     } catch (_) {
       return null;

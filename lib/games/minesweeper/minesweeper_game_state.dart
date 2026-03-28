@@ -128,12 +128,12 @@ class MinesweeperConfig {
 
   factory MinesweeperConfig.fromJson(Map<String, dynamic> json) {
     return MinesweeperConfig(
-      id: json['id'] as String? ?? 'custom',
-      label: json['label'] as String? ?? 'Custom',
+      id: json['id'] as String,
+      label: json['label'] as String,
       rows: (json['rows'] as num).toInt(),
       columns: (json['columns'] as num).toInt(),
       mines: (json['mines'] as num).toInt(),
-      isPreset: json['isPreset'] as bool? ?? false,
+      isPreset: json['isPreset'] as bool,
     );
   }
 }
@@ -183,11 +183,11 @@ class MinesweeperCell {
 
   factory MinesweeperCell.fromJson(Map<String, dynamic> json) {
     return MinesweeperCell(
-      hasMine: json['hasMine'] as bool? ?? false,
-      revealed: json['revealed'] as bool? ?? false,
-      flagged: json['flagged'] as bool? ?? false,
-      exploded: json['exploded'] as bool? ?? false,
-      adjacentMines: (json['adjacentMines'] as num?)?.toInt() ?? 0,
+      hasMine: json['hasMine'] as bool,
+      revealed: json['revealed'] as bool,
+      flagged: json['flagged'] as bool,
+      exploded: json['exploded'] as bool,
+      adjacentMines: (json['adjacentMines'] as num).toInt(),
     );
   }
 }
@@ -286,15 +286,10 @@ class MinesweeperGameState {
     return MinesweeperGameState._(
       config: config,
       board: board,
-      status: MinesweeperGameStatus.values.firstWhere(
-        (value) => value.name == (json['status'] as String? ?? 'ready'),
-        orElse: () => MinesweeperGameStatus.ready,
-      ),
-      message:
-          json['message'] as String? ??
-          'Clear every safe tile. First tap is always safe.',
-      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
-      generated: json['generated'] as bool? ?? false,
+      status: MinesweeperGameStatus.values.byName(json['status'] as String),
+      message: json['message'] as String,
+      elapsedSeconds: (json['elapsedSeconds'] as num).toInt(),
+      generated: json['generated'] as bool,
     );
   }
 

@@ -164,7 +164,7 @@ void main() {
     _expectHeaderStats(score: 0, best: 0, moves: 0, time: '00:00');
   });
 
-  testWidgets('app bar keeps help and disabled settings only', (tester) async {
+  testWidgets('app bar keeps help and opens settings', (tester) async {
     await tester.pumpWidget(_buildHarness());
     await tester.pumpAndSettle();
 
@@ -172,10 +172,12 @@ void main() {
     expect(find.byTooltip('Settings'), findsOneWidget);
     expect(find.byTooltip('Game menu'), findsNothing);
     expect(find.byKey(const Key('2048_pause')), findsNothing);
-    expect(
-      tester.widget<IconButton>(find.byKey(const Key('2048_settings_action'))),
-      isA<IconButton>().having((button) => button.onPressed, 'onPressed', null),
-    );
+
+    await tester.tap(find.byKey(const Key('2048_settings_action')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2048 settings'), findsOneWidget);
+    expect(find.byKey(const Key('2048_auto_continue_toggle')), findsOneWidget);
   });
 
   testWidgets('won board offers keep going and statistics dialog', (

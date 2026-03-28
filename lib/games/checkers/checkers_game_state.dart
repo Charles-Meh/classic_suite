@@ -2,7 +2,7 @@ import 'dart:convert';
 
 enum CheckersSide { red, black }
 
-enum CheckersGameStatus { active, redWon, blackWon, draw, paused }
+enum CheckersGameStatus { active, redWon, blackWon, draw }
 
 enum CheckersGameMode { vsAi, passAndPlay }
 
@@ -35,7 +35,7 @@ class CheckersPiece {
   factory CheckersPiece.fromJson(Map<String, dynamic> json) {
     return CheckersPiece(
       side: CheckersSide.values.byName(json['side'] as String),
-      isKing: json['isKing'] as bool? ?? false,
+      isKing: json['isKing'] as bool,
     );
   }
 }
@@ -76,7 +76,7 @@ class CheckersMove {
             ),
           )
           .toList(),
-      capturedSquares: (json['capturedSquares'] as List<dynamic>? ?? const [])
+      capturedSquares: (json['capturedSquares'] as List<dynamic>)
           .map(
             (square) => (
               ((square as List<dynamic>)[0] as num).toInt(),
@@ -84,7 +84,7 @@ class CheckersMove {
             ),
           )
           .toList(),
-      promotes: json['promotes'] as bool? ?? false,
+      promotes: json['promotes'] as bool,
     );
   }
 
@@ -213,18 +213,18 @@ class CheckersGameState {
           .toList(),
       turn: CheckersSide.values.byName(json['turn'] as String),
       status: CheckersGameStatus.values.byName(json['status'] as String),
-      message: json['message'] as String? ?? 'Red to move.',
-      mode: CheckersGameMode.values.byName(json['mode'] as String? ?? 'vsAi'),
+      message: json['message'] as String,
+      mode: CheckersGameMode.values.byName(json['mode'] as String),
       difficulty: CheckersDifficulty.values.byName(
-        json['difficulty'] as String? ?? 'medium',
+        json['difficulty'] as String,
       ),
-      moveHistory: (json['moveHistory'] as List<dynamic>? ?? const [])
+      moveHistory: (json['moveHistory'] as List<dynamic>)
           .map(
             (entry) =>
                 CheckersHistoryEntry.fromJson(entry as Map<String, dynamic>),
           )
           .toList(),
-      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
+      elapsedSeconds: (json['elapsedSeconds'] as num).toInt(),
       selectedSquare: json['selectedSquare'] == null
           ? null
           : (
@@ -234,7 +234,7 @@ class CheckersGameState {
       lastMove: json['lastMove'] == null
           ? null
           : CheckersMove.fromJson(json['lastMove'] as Map<String, dynamic>),
-      resultRecorded: json['resultRecorded'] as bool? ?? false,
+      resultRecorded: json['resultRecorded'] as bool,
     );
   }
 
@@ -304,13 +304,11 @@ class CheckersGameState {
     );
   }
 
-  bool get isPaused => status == CheckersGameStatus.paused;
   bool get isFinished =>
       status == CheckersGameStatus.redWon ||
       status == CheckersGameStatus.blackWon ||
       status == CheckersGameStatus.draw;
   bool get isHumanTurn =>
-      !isPaused &&
       !isFinished &&
       (mode == CheckersGameMode.passAndPlay || turn == CheckersSide.red);
   CheckersSide get aiSide => CheckersSide.black;
@@ -318,16 +316,8 @@ class CheckersGameState {
   CheckersPiece? pieceAt(int row, int col) => board[row][col];
 
   CheckersGameState incrementElapsed() {
-    if (isPaused || isFinished) return this;
-    return copyWith(elapsedSeconds: elapsedSeconds + 1);
-  }
-
-  CheckersGameState togglePause() {
     if (isFinished) return this;
-    return copyWith(
-      status: isPaused ? CheckersGameStatus.active : CheckersGameStatus.paused,
-      message: isPaused ? '${turn.label} to move.' : 'Game paused.',
-    );
+    return copyWith(elapsedSeconds: elapsedSeconds + 1);
   }
 
   CheckersGameState setMode(CheckersGameMode nextMode) {
@@ -341,7 +331,7 @@ class CheckersGameState {
   CheckersGameState markResultRecorded() => copyWith(resultRecorded: true);
 
   CheckersGameState selectSquare(int row, int col) {
-    if (isPaused || isFinished) return this;
+    if (isFinished) return this;
     final piece = pieceAt(row, col);
     if (piece == null || piece.side != turn) {
       return copyWith(clearSelectedSquare: true);

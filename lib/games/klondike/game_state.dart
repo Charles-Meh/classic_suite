@@ -115,16 +115,22 @@ class GameState {
 
   factory GameState.fromJson(Map<String, dynamic> json) {
     final state = GameState._fromSnapshot(
-      (json['drawCount'] as num?)?.toInt() ?? 1,
+      (json['drawCount'] as num).toInt(),
       currentSeed: (json['currentSeed'] as num?)?.toInt(),
-      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
-      moveCount: (json['moveCount'] as num?)?.toInt() ?? 0,
-      score: (json['score'] as num?)?.toInt() ?? 0,
+      elapsedSeconds: (json['elapsedSeconds'] as num).toInt(),
+      moveCount: (json['moveCount'] as num).toInt(),
+      score: (json['score'] as num).toInt(),
     );
-    state._replaceFromJsonPile(state.stock, json['stock']);
-    state._replaceFromJsonPile(state.waste, json['waste']);
-    state._replacePileListFromJson(state.foundations, json['foundations']);
-    state._replacePileListFromJson(state.tableau, json['tableau']);
+    state._replaceFromJsonPile(state.stock, json['stock'] as List<dynamic>);
+    state._replaceFromJsonPile(state.waste, json['waste'] as List<dynamic>);
+    state._replacePileListFromJson(
+      state.foundations,
+      json['foundations'] as List<dynamic>,
+    );
+    state._replacePileListFromJson(
+      state.tableau,
+      json['tableau'] as List<dynamic>,
+    );
     return state;
   }
 
@@ -136,9 +142,6 @@ class GameState {
       final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) {
         return GameState.fromJson(decoded);
-      }
-      if (decoded is Map) {
-        return GameState.fromJson(decoded.cast<String, dynamic>());
       }
     } catch (_) {
       return null;
@@ -370,23 +373,25 @@ class GameState {
       ..addAll(source.map(_copyCard));
   }
 
-  void _replaceFromJsonPile(List<KlondikeCard> target, dynamic source) {
+  void _replaceFromJsonPile(List<KlondikeCard> target, List<dynamic> source) {
     target
       ..clear()
       ..addAll(
-        (source as List<dynamic>? ?? const []).whereType<Map>().map(
-          (card) => decodeKlondikeCard(card.cast<String, dynamic>()),
+        source.map(
+          (card) => decodeKlondikeCard((card as Map).cast<String, dynamic>()),
         ),
       );
   }
 
   void _replacePileListFromJson(
     List<List<KlondikeCard>> target,
-    dynamic source,
+    List<dynamic> source,
   ) {
-    final piles = source as List<dynamic>? ?? const [];
+    if (source.length != target.length) {
+      throw const FormatException('Invalid Klondike pile list payload.');
+    }
     for (int i = 0; i < target.length; i++) {
-      _replaceFromJsonPile(target[i], i < piles.length ? piles[i] : null);
+      _replaceFromJsonPile(target[i], source[i] as List<dynamic>);
     }
   }
 

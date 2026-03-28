@@ -39,6 +39,30 @@ class GameStatsRow extends StatelessWidget {
   }
 }
 
+List<Widget> buildGameAppBarActions({
+  required VoidCallback onHelp,
+  VoidCallback? onSettings,
+  Key? helpKey,
+  Key? settingsKey,
+  bool showSettings = true,
+}) {
+  return [
+    IconButton(
+      key: helpKey,
+      tooltip: 'Help',
+      onPressed: onHelp,
+      icon: const Icon(Icons.help_outline_rounded),
+    ),
+    if (showSettings)
+      IconButton(
+        key: settingsKey,
+        tooltip: 'Settings',
+        onPressed: onSettings,
+        icon: const Icon(Icons.settings_outlined),
+      ),
+  ];
+}
+
 class _GameStatChip extends StatelessWidget {
   const _GameStatChip({required this.item, required this.dark});
 
@@ -108,6 +132,9 @@ class GameBottomBar extends StatelessWidget {
     this.showUndoButton = true,
     this.showHintButton = true,
     this.newDealLabel = 'New Deal',
+    this.backgroundColor,
+    this.borderColor,
+    this.shadowColor = const Color(0x14000000),
   });
 
   final VoidCallback? onUndo;
@@ -120,6 +147,9 @@ class GameBottomBar extends StatelessWidget {
   final bool showUndoButton;
   final bool showHintButton;
   final String newDealLabel;
+  final Color? backgroundColor;
+  final Color? borderColor;
+  final Color shadowColor;
 
   @override
   Widget build(BuildContext context) {
@@ -144,17 +174,20 @@ class GameBottomBar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF111827)
-              : Colors.white,
+          color:
+              backgroundColor ??
+              (Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF111827)
+                  : Colors.white),
           border: Border(
             top: BorderSide(
-              color: Theme.of(context).colorScheme.outlineVariant,
+              color:
+                  borderColor ?? Theme.of(context).colorScheme.outlineVariant,
             ),
           ),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
-              color: Color(0x14000000),
+              color: shadowColor,
               blurRadius: 18,
               offset: Offset(0, -6),
             ),

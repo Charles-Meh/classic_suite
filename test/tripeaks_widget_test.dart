@@ -165,11 +165,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('saved state restores paused deal with elapsed time', (
-    tester,
-  ) async {
+  testWidgets('saved state restores deal with elapsed time', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1600));
-    final saved = _interactiveState().withElapsedSeconds(44).togglePaused();
+    final saved = _interactiveState().withElapsedSeconds(44);
     SharedPreferences.setMockInitialValues({
       TriPeaksGameState.storageKey: saved.encode(),
     });
@@ -178,7 +176,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('00:44'), findsOneWidget);
-    expect(find.text('Paused'), findsOneWidget);
+    expect(find.text('Paused'), findsNothing);
+    expect(find.byKey(const Key('tripeaks_pause_overlay')), findsNothing);
   });
 
   testWidgets(
@@ -199,6 +198,8 @@ void main() {
       expect(find.text('Cleared'), findsOneWidget);
       expect(find.byKey(const Key('tripeaks_stock_count')), findsOneWidget);
       expect(find.text('2'), findsWidgets);
+      expect(find.byTooltip('Help'), findsOneWidget);
+      expect(find.byTooltip('Settings'), findsNothing);
     },
   );
 
@@ -221,6 +222,23 @@ void main() {
       find.byKey(const ValueKey<String>('tripeaks_stock_hint')),
       findsNothing,
     );
+  });
+
+  testWidgets('new deal shows a confirmation warning', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1600));
+
+    await tester.pumpWidget(
+      MaterialApp(home: TriPeaksGame(initialState: _interactiveState())),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'New Deal'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Start new game?'), findsOneWidget);
+    expect(find.text('Current progress will be lost.'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Cancel'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'New Game'), findsOneWidget);
   });
 
   testWidgets('hint highlights the stock when no tableau move is available', (

@@ -1159,16 +1159,10 @@ class _SpiderGameState extends State<SpiderGame> with WidgetsBindingObserver {
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         title: const Text('Spider Solitaire'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline),
-            onPressed: _openHelp,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _openSettings,
-          ),
-        ],
+        actions: buildGameAppBarActions(
+          onHelp: _openHelp,
+          onSettings: _openSettings,
+        ),
       ),
       bottomNavigationBar: _buildBottomBar(),
       body: Container(

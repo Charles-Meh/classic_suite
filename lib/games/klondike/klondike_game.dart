@@ -46,6 +46,7 @@ class _KlondikeGameState extends State<KlondikeGame>
   bool _loading = true;
   bool _isWasteDragging = false;
   bool _isAutocompleteRunning = false;
+  bool _isAutocompletePromptDismissed = false;
   bool _hasRecordedCurrentWin = false;
   KlondikeStats _stats = const KlondikeStats();
   _DealMode _dealMode = _DealMode.winning;
@@ -106,6 +107,7 @@ class _KlondikeGameState extends State<KlondikeGame>
     setState(() {
       _stats = nextStats;
       _hasRecordedCurrentWin = state.isWon;
+      _isAutocompletePromptDismissed = false;
       _loading = false;
     });
     _syncTimers();
@@ -196,6 +198,7 @@ class _KlondikeGameState extends State<KlondikeGame>
       _activeTableauDrag = null;
       _activeHint = null;
       _isWasteDragging = false;
+      _isAutocompletePromptDismissed = false;
     });
 
     if (changed) {
@@ -271,6 +274,7 @@ class _KlondikeGameState extends State<KlondikeGame>
       _activeHint = null;
       _activeTableauDrag = null;
       _isWasteDragging = false;
+      _isAutocompletePromptDismissed = false;
       _hasRecordedCurrentWin = state.isWon;
     });
     _syncTimers();
@@ -300,6 +304,7 @@ class _KlondikeGameState extends State<KlondikeGame>
       _activeHint = null;
       _activeTableauDrag = null;
       _isWasteDragging = false;
+      _isAutocompletePromptDismissed = false;
       _isAutocompleteRunning = false;
       _hasRecordedCurrentWin = false;
     });
@@ -314,6 +319,19 @@ class _KlondikeGameState extends State<KlondikeGame>
         KlondikeAutocomplete.canAutocomplete(state);
   }
 
+  bool get _showAutocompletePrompt {
+    return _canAutocomplete && !_isAutocompletePromptDismissed;
+  }
+
+  void _dismissAutocompletePrompt() {
+    if (!_showAutocompletePrompt) {
+      return;
+    }
+    setState(() {
+      _isAutocompletePromptDismissed = true;
+    });
+  }
+
   Future<void> _runAutocomplete() async {
     if (!_canAutocomplete) {
       return;
@@ -322,6 +340,7 @@ class _KlondikeGameState extends State<KlondikeGame>
     _recordHistory();
     setState(() {
       _isAutocompleteRunning = true;
+      _isAutocompletePromptDismissed = false;
       _activeHint = null;
       _activeTableauDrag = null;
       _isWasteDragging = false;
@@ -1418,6 +1437,80 @@ class _KlondikeGameState extends State<KlondikeGame>
     );
   }
 
+  Widget _buildAutocompletePrompt() {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            key: const Key('autocomplete_prompt_dismiss_area'),
+            behavior: HitTestBehavior.opaque,
+            onTap: _dismissAutocompletePrompt,
+            child: Container(color: const Color(0x66000000)),
+          ),
+        ),
+        Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              key: const Key('autocomplete_prompt'),
+              constraints: const BoxConstraints(maxWidth: 320),
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF123B27),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x55000000),
+                    blurRadius: 24,
+                    offset: Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.auto_fix_high_rounded,
+                    size: 30,
+                    color: Colors.white.withValues(alpha: 0.92),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Auto-complete is available',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.95),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'All tableau cards are revealed. Finish automatically, or tap outside to keep playing manually.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.82),
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    key: const Key('autocomplete_button'),
+                    onPressed: _runAutocomplete,
+                    icon: const Icon(Icons.auto_fix_high),
+                    label: const Text('Auto-complete'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _confirmNewDeal() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1447,16 +1540,10 @@ class _KlondikeGameState extends State<KlondikeGame>
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         title: const Text('Klondike Solitaire'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline),
-            onPressed: _openHelp,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _openSettings,
-          ),
-        ],
+        actions: buildGameAppBarActions(
+          onHelp: _openHelp,
+          onSettings: _openSettings,
+        ),
       ),
       bottomNavigationBar: _buildBottomBar(),
       body: _loading
@@ -1558,6 +1645,7 @@ class _KlondikeGameState extends State<KlondikeGame>
                             const SizedBox.shrink(),
                           ],
                         ),
+                        if (_showAutocompletePrompt) _buildAutocompletePrompt(),
                         if (state.isWon) _buildWinOverlay(metrics),
                       ],
                     );

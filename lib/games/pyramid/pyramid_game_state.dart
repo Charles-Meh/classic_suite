@@ -46,18 +46,14 @@ class PyramidCardRef {
   };
 
   factory PyramidCardRef.fromJson(Map<String, dynamic> json) {
-    final zoneName = json['zone'] as String? ?? PyramidCardZone.pyramid.name;
-    final zone = PyramidCardZone.values.firstWhere(
-      (value) => value.name == zoneName,
-      orElse: () => PyramidCardZone.pyramid,
-    );
+    final zone = PyramidCardZone.values.byName(json['zone'] as String);
     return switch (zone) {
       PyramidCardZone.pyramid => PyramidCardRef.pyramid(
-        (json['row'] as num?)?.toInt() ?? 0,
-        (json['column'] as num?)?.toInt() ?? 0,
+        (json['row'] as num).toInt(),
+        (json['column'] as num).toInt(),
       ),
       PyramidCardZone.waste => PyramidCardRef.waste(
-        (json['wasteIndex'] as num?)?.toInt() ?? 0,
+        (json['wasteIndex'] as num).toInt(),
       ),
     };
   }
@@ -124,17 +120,9 @@ class PyramidCard {
 
   factory PyramidCard.fromJson(Map<String, dynamic> json) {
     return PyramidCard(
-      suit: PyramidSuit.values.firstWhere(
-        (value) =>
-            value.name == (json['suit'] as String? ?? PyramidSuit.clubs.name),
-        orElse: () => PyramidSuit.clubs,
-      ),
-      rank: PyramidRank.values.firstWhere(
-        (value) =>
-            value.name == (json['rank'] as String? ?? PyramidRank.ace.name),
-        orElse: () => PyramidRank.ace,
-      ),
-      removed: json['removed'] as bool? ?? false,
+      suit: PyramidSuit.values.byName(json['suit'] as String),
+      rank: PyramidRank.values.byName(json['rank'] as String),
+      removed: json['removed'] as bool,
     );
   }
 }
@@ -222,8 +210,8 @@ class PyramidGameState {
 
   factory PyramidGameState.fromJson(Map<String, dynamic> json) {
     return PyramidGameState._(
-      seed: (json['seed'] as num?)?.toInt() ?? 1,
-      pyramid: ((json['pyramid'] as List<dynamic>?) ?? const [])
+      seed: (json['seed'] as num).toInt(),
+      pyramid: (json['pyramid'] as List<dynamic>)
           .map(
             (row) => (row as List<dynamic>)
                 .map(
@@ -232,29 +220,22 @@ class PyramidGameState {
                 .toList(),
           )
           .toList(),
-      stock: ((json['stock'] as List<dynamic>?) ?? const [])
+      stock: (json['stock'] as List<dynamic>)
           .map((card) => PyramidCard.fromJson(card as Map<String, dynamic>))
           .toList(),
-      waste: ((json['waste'] as List<dynamic>?) ?? const [])
+      waste: (json['waste'] as List<dynamic>)
           .map((card) => PyramidCard.fromJson(card as Map<String, dynamic>))
           .toList(),
-      status: PyramidGameStatus.values.firstWhere(
-        (value) =>
-            value.name ==
-            (json['status'] as String? ?? PyramidGameStatus.running.name),
-        orElse: () => PyramidGameStatus.running,
-      ),
-      message:
-          json['message'] as String? ??
-          'Clear the pyramid by matching exposed cards to 13.',
-      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
+      status: PyramidGameStatus.values.byName(json['status'] as String),
+      message: json['message'] as String,
+      elapsedSeconds: (json['elapsedSeconds'] as num).toInt(),
       selectedCard: json['selectedCard'] == null
           ? null
           : PyramidCardRef.fromJson(
               json['selectedCard'] as Map<String, dynamic>,
             ),
-      paused: json['paused'] as bool? ?? false,
-      cycleCount: (json['cycleCount'] as num?)?.toInt() ?? 0,
+      paused: json['paused'] as bool,
+      cycleCount: (json['cycleCount'] as num).toInt(),
     );
   }
 

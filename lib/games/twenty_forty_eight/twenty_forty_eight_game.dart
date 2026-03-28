@@ -24,11 +24,15 @@ class TwentyFortyEightGame extends StatefulWidget {
 
 class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
     with WidgetsBindingObserver {
+  static const String _autoContinuePreferenceKey =
+      'classic_suite.2048.auto_continue_after_win';
+
   late TwentyFortyEightGameState state;
   final TwentyFortyEightStatsStore _statsStore = TwentyFortyEightStatsStore();
   TwentyFortyEightStats _stats = const TwentyFortyEightStats();
   Timer? _ticker;
   bool _loading = true;
+  bool _autoContinueAfterWin = false;
   bool _hasRecordedStart = false;
   bool _hasRecordedFinish = false;
   int _gestureLock = 0;
@@ -40,7 +44,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
     WidgetsBinding.instance.addObserver(this);
     state = widget.initialState ?? TwentyFortyEightGameState.newGame();
     _hasRecordedStart = state.moveCount > 0;
-    _hasRecordedFinish = state.isLost || state.isWon;
+    _hasRecordedFinish = state.isLost || state.hasWon;
     _loadState();
   }
 
@@ -56,13 +60,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
     if (lifecycleState == AppLifecycleState.inactive ||
         lifecycleState == AppLifecycleState.paused ||
         lifecycleState == AppLifecycleState.detached) {
-      if (mounted && state.isActive) {
-        setState(() {
-          state = state.pause();
-        });
-        _persistState();
-        _syncTicker();
-      }
+      _persistState();
     }
   }
 
@@ -83,8 +81,10 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
       if (loaded != null) {
         state = loaded;
         _hasRecordedStart = state.moveCount > 0;
-        _hasRecordedFinish = state.isLost || state.isWon;
+        _hasRecordedFinish = state.isLost || state.hasWon;
       }
+      _autoContinueAfterWin =
+          prefs.getBool(_autoContinuePreferenceKey) ?? false;
       _stats = stats;
       _loading = false;
     });
@@ -94,6 +94,11 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
   Future<void> _persistState() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(TwentyFortyEightGameState.storageKey, state.encode());
+  }
+
+  Future<void> _persistSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoContinuePreferenceKey, _autoContinueAfterWin);
   }
 
   void _syncTicker() {
@@ -125,7 +130,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
   }
 
   Future<void> _recordFinishedGameIfNeeded() async {
-    if (_hasRecordedFinish || (!state.isLost && !state.isWon)) {
+    if (_hasRecordedFinish || (!state.isLost && !state.hasWon)) {
       return;
     }
     _hasRecordedFinish = true;
@@ -143,15 +148,19 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
 
   Future<void> _applyState(TwentyFortyEightGameState nextState) async {
     final startBefore = state.moveCount == 0;
-    final finishedBefore = state.isLost || state.isWon;
+    final finishedBefore = state.isLost || state.hasWon;
+    var resolvedState = nextState;
+    if (_autoContinueAfterWin && resolvedState.isWon) {
+      resolvedState = resolvedState.continuePast2048();
+    }
     setState(() {
-      state = nextState;
+      state = resolvedState;
     });
 
-    if (startBefore && nextState.moveCount > 0) {
+    if (startBefore && resolvedState.moveCount > 0) {
       await _recordStartedGameIfNeeded();
     }
-    if (!finishedBefore && (nextState.isLost || nextState.isWon)) {
+    if (!finishedBefore && (resolvedState.isLost || resolvedState.hasWon)) {
       await _recordFinishedGameIfNeeded();
     }
 
@@ -191,10 +200,6 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
 
   Future<void> _handleUndo() async {
     await _applyState(state.undo());
-  }
-
-  Future<void> _handleResume() async {
-    await _applyState(state.resume());
   }
 
   Future<void> _handleContinue() async {
@@ -306,6 +311,76 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
     );
   }
 
+  Future<void> _showSettings() async {
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        var autoContinue = _autoContinueAfterWin;
+        return StatefulBuilder(
+          builder: (context, setModalState) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '2048 settings',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile.adaptive(
+                    key: const Key('2048_auto_continue_toggle'),
+                    contentPadding: EdgeInsets.zero,
+                    value: autoContinue,
+                    onChanged: (value) {
+                      setModalState(() {
+                        autoContinue = value;
+                      });
+                    },
+                    title: const Text('Auto-continue after 2048'),
+                    subtitle: const Text(
+                      'Keep the run going automatically instead of stopping on the win screen.',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () =>
+                            Navigator.of(context).pop(autoContinue),
+                        child: const Text('Apply'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result == null || result == _autoContinueAfterWin) {
+      return;
+    }
+
+    setState(() {
+      _autoContinueAfterWin = result;
+      if (_autoContinueAfterWin && state.isWon) {
+        state = state.continuePast2048();
+      }
+    });
+    await _persistSettings();
+    await _persistState();
+  }
+
   Widget _buildHeader(BuildContext context) {
     return Card(
       child: Padding(
@@ -365,34 +440,28 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
           child: GestureDetector(
             key: const Key('2048_swipe_surface'),
             behavior: HitTestBehavior.opaque,
-            onPanStart: state.isPaused
-                ? null
-                : (_) {
-                    _dragDelta = Offset.zero;
-                  },
-            onPanUpdate: state.isPaused
-                ? null
-                : (details) {
-                    _dragDelta += details.delta;
-                  },
-            onPanEnd: state.isPaused
-                ? null
-                : (_) {
-                    final delta = _dragDelta;
-                    _dragDelta = Offset.zero;
-                    if (delta.distance < 36) {
-                      return;
-                    }
-                    if (delta.dx.abs() > delta.dy.abs()) {
-                      _handleMove(
-                        delta.dx < 0 ? MoveDirection.left : MoveDirection.right,
-                      );
-                    } else {
-                      _handleMove(
-                        delta.dy < 0 ? MoveDirection.up : MoveDirection.down,
-                      );
-                    }
-                  },
+            onPanStart: (_) {
+              _dragDelta = Offset.zero;
+            },
+            onPanUpdate: (details) {
+              _dragDelta += details.delta;
+            },
+            onPanEnd: (_) {
+              final delta = _dragDelta;
+              _dragDelta = Offset.zero;
+              if (delta.distance < 36) {
+                return;
+              }
+              if (delta.dx.abs() > delta.dy.abs()) {
+                _handleMove(
+                  delta.dx < 0 ? MoveDirection.left : MoveDirection.right,
+                );
+              } else {
+                _handleMove(
+                  delta.dy < 0 ? MoveDirection.up : MoveDirection.down,
+                );
+              }
+            },
             child: AspectRatio(
               aspectRatio: 1,
               child: Stack(
@@ -430,7 +499,7 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                       height: cellSize,
                       child: _TileCard(tile: tile),
                     ),
-                  if (state.isPaused || state.isLost)
+                  if (state.isLost)
                     Positioned.fill(
                       child: AnimatedContainer(
                         duration: kCardOverlayDuration,
@@ -452,16 +521,14 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  state.isPaused ? 'Paused' : 'Game over',
+                                  'Game over',
                                   style: Theme.of(
                                     context,
                                   ).textTheme.headlineSmall,
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  state.isPaused
-                                      ? 'Your board is saved.'
-                                      : 'Start a new run or undo the last move.',
+                                  'Start a new run or undo the last move.',
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 12),
@@ -470,11 +537,6 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
                                   spacing: 8,
                                   runSpacing: 8,
                                   children: [
-                                    if (state.isPaused)
-                                      FilledButton(
-                                        onPressed: _handleResume,
-                                        child: const Text('Resume'),
-                                      ),
                                     OutlinedButton(
                                       onPressed: _confirmStartNewGame,
                                       child: const Text('Restart'),
@@ -536,19 +598,11 @@ class _TwentyFortyEightGameState extends State<TwentyFortyEightGame>
       appBar: AppBar(
         centerTitle: true,
         title: const Text('2048'),
-        actions: [
-          IconButton(
-            tooltip: 'Help',
-            onPressed: _showHowToPlay,
-            icon: const Icon(Icons.help_outline),
-          ),
-          IconButton(
-            key: const Key('2048_settings_action'),
-            tooltip: 'Settings',
-            onPressed: null,
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
+        actions: buildGameAppBarActions(
+          onHelp: _showHowToPlay,
+          onSettings: _showSettings,
+          settingsKey: const Key('2048_settings_action'),
+        ),
       ),
       bottomNavigationBar: _loading
           ? null

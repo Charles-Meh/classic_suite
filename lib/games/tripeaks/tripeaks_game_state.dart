@@ -59,7 +59,7 @@ class TriPeaksCard {
     );
     return TriPeaksCard(
       card: PlayingCard(suit, cardValue),
-      faceUp: json['faceUp'] as bool? ?? true,
+      faceUp: json['faceUp'] as bool,
     );
   }
 }
@@ -91,7 +91,6 @@ class TriPeaksGameState {
     required this.longestRun,
     required this.drawCount,
     required this.elapsedSeconds,
-    required this.paused,
     required this.status,
     required this.message,
     required this.seed,
@@ -138,7 +137,6 @@ class TriPeaksGameState {
   final int longestRun;
   final int drawCount;
   final int elapsedSeconds;
-  final bool paused;
   final TriPeaksStatus status;
   final String message;
   final int seed;
@@ -166,7 +164,6 @@ class TriPeaksGameState {
       longestRun: 0,
       drawCount: 0,
       elapsedSeconds: 0,
-      paused: false,
       status: TriPeaksStatus.active,
       message: 'Clear the peaks by matching one rank up or down.',
       seed: actualSeed,
@@ -183,7 +180,6 @@ class TriPeaksGameState {
     int longestRun = 0,
     int drawCount = 0,
     int elapsedSeconds = 0,
-    bool paused = false,
     TriPeaksStatus status = TriPeaksStatus.active,
     String message = 'Debug state',
     int seed = 0,
@@ -198,7 +194,6 @@ class TriPeaksGameState {
       longestRun: longestRun,
       drawCount: drawCount,
       elapsedSeconds: elapsedSeconds,
-      paused: paused,
       status: status,
       message: message,
       seed: seed,
@@ -220,21 +215,15 @@ class TriPeaksGameState {
       waste: (json['waste'] as List<dynamic>)
           .map((entry) => TriPeaksCard.fromJson(entry as Map<String, dynamic>))
           .toList(),
-      clearedCount: (json['clearedCount'] as num?)?.toInt() ?? 0,
-      score: (json['score'] as num?)?.toInt() ?? 0,
-      currentRun: (json['currentRun'] as num?)?.toInt() ?? 0,
-      longestRun: (json['longestRun'] as num?)?.toInt() ?? 0,
-      drawCount: (json['drawCount'] as num?)?.toInt() ?? 0,
-      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
-      paused: json['paused'] as bool? ?? false,
-      status: TriPeaksStatus.values.firstWhere(
-        (value) => value.name == (json['status'] as String? ?? 'active'),
-        orElse: () => TriPeaksStatus.active,
-      ),
-      message:
-          json['message'] as String? ??
-          'Clear the peaks by matching one rank up or down.',
-      seed: (json['seed'] as num?)?.toInt() ?? 0,
+      clearedCount: (json['clearedCount'] as num).toInt(),
+      score: (json['score'] as num).toInt(),
+      currentRun: (json['currentRun'] as num).toInt(),
+      longestRun: (json['longestRun'] as num).toInt(),
+      drawCount: (json['drawCount'] as num).toInt(),
+      elapsedSeconds: (json['elapsedSeconds'] as num).toInt(),
+      status: TriPeaksStatus.values.byName(json['status'] as String),
+      message: json['message'] as String,
+      seed: (json['seed'] as num).toInt(),
     );
   }
 
@@ -248,7 +237,6 @@ class TriPeaksGameState {
     int? longestRun,
     int? drawCount,
     int? elapsedSeconds,
-    bool? paused,
     TriPeaksStatus? status,
     String? message,
     int? seed,
@@ -263,7 +251,6 @@ class TriPeaksGameState {
       longestRun: longestRun ?? this.longestRun,
       drawCount: drawCount ?? this.drawCount,
       elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
-      paused: paused ?? this.paused,
       status: status ?? this.status,
       message: message ?? this.message,
       seed: seed ?? this.seed,
@@ -283,7 +270,7 @@ class TriPeaksGameState {
 
   bool get isWon => status == TriPeaksStatus.won;
   bool get isLost => status == TriPeaksStatus.lost;
-  bool get isActive => status == TriPeaksStatus.active && !paused;
+  bool get isActive => status == TriPeaksStatus.active;
   int get cardsRemainingInPeaks => 28 - clearedCount;
   TriPeaksCard get wasteTop => waste.last;
 
@@ -308,10 +295,7 @@ class TriPeaksGameState {
 
   bool isValidMove(int index) {
     final card = tableau[index];
-    if (card == null ||
-        !isExposed(index) ||
-        status != TriPeaksStatus.active ||
-        paused) {
+    if (card == null || !isExposed(index) || status != TriPeaksStatus.active) {
       return false;
     }
     return ranksAreAdjacent(card.rank, wasteTop.rank);
@@ -367,7 +351,7 @@ class TriPeaksGameState {
   }
 
   TriPeaksGameState drawFromStock() {
-    if (stock.isEmpty || status != TriPeaksStatus.active || paused) {
+    if (stock.isEmpty || status != TriPeaksStatus.active) {
       return this;
     }
 
@@ -400,16 +384,6 @@ class TriPeaksGameState {
     return copyWith(elapsedSeconds: elapsedSeconds + 1);
   }
 
-  TriPeaksGameState togglePaused() {
-    if (isWon || isLost) {
-      return this;
-    }
-    return copyWith(
-      paused: !paused,
-      message: !paused ? 'Game paused.' : 'Back in play.',
-    );
-  }
-
   TriPeaksGameState withElapsedSeconds(int value) {
     return copyWith(elapsedSeconds: value < 0 ? 0 : value);
   }
@@ -424,7 +398,6 @@ class TriPeaksGameState {
     'longestRun': longestRun,
     'drawCount': drawCount,
     'elapsedSeconds': elapsedSeconds,
-    'paused': paused,
     'status': status.name,
     'message': message,
     'seed': seed,

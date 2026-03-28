@@ -33,7 +33,7 @@ void main() {
   });
 
   test(
-    'best hint still allows moving a king-led stack to an empty tableau',
+    'best hint skips a king-led stack that only shuffles between empty columns',
     () {
       final state = _emptyState();
 
@@ -44,15 +44,28 @@ void main() {
 
       final hint = KlondikeAdvisor.bestHint(state);
 
-      expect(hint.kind, KlondikeSuggestionKind.moveToTableau);
-      expect(hint.source?.zone, KlondikeLocationZone.tableau);
-      expect(hint.source?.pileIndex, 0);
-      expect(hint.source?.cardIndex, 0);
-      expect(hint.targetTableauIndex, 1);
-      expect(hint.cards, hasLength(2));
-      expect(hint.cards.first.card.value, CardValue.king);
+      expect(hint.kind, KlondikeSuggestionKind.noMoves);
     },
   );
+
+  test('best hint allows a king to empty when it reveals a hidden card', () {
+    final state = _emptyState();
+
+    state.tableau[0].addAll([
+      KlondikeCard(PlayingCard(Suit.spades, CardValue.two), faceUp: false),
+      _card(Suit.spades, CardValue.king),
+    ]);
+
+    final hint = KlondikeAdvisor.bestHint(state);
+
+    expect(hint.kind, KlondikeSuggestionKind.moveToTableau);
+    expect(hint.source?.zone, KlondikeLocationZone.tableau);
+    expect(hint.source?.pileIndex, 0);
+    expect(hint.source?.cardIndex, 1);
+    expect(hint.cards, hasLength(1));
+    expect(hint.cards.first.card.value, CardValue.king);
+    expect(hint.targetTableauIndex, isNotNull);
+  });
 
   test('best hint still prefers moving an ace to foundation', () {
     final state = _emptyState();

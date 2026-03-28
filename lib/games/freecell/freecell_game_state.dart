@@ -62,22 +62,25 @@ class FreeCellGameState {
   factory FreeCellGameState.fromJson(Map<String, dynamic> json) {
     final state = FreeCellGameState._fromSnapshot(
       gameNumber: (json['gameNumber'] as num?)?.toInt(),
-      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
-      moveCount: (json['moveCount'] as num?)?.toInt() ?? 0,
-      score: (json['score'] as num?)?.toInt() ?? 0,
+      elapsedSeconds: (json['elapsedSeconds'] as num).toInt(),
+      moveCount: (json['moveCount'] as num).toInt(),
+      score: (json['score'] as num).toInt(),
     );
 
-    final cascades = json['cascades'] as List<dynamic>? ?? const [];
+    final cascades = json['cascades'] as List<dynamic>;
+    if (cascades.length != state.cascades.length) {
+      throw const FormatException('Invalid FreeCell cascades payload.');
+    }
     for (int i = 0; i < state.cascades.length; i++) {
-      _replaceCards(
-        state.cascades[i],
-        i < cascades.length ? _decodePile(cascades[i]) : const [],
-      );
+      _replaceCards(state.cascades[i], _decodePile(cascades[i]));
     }
 
-    final freecells = json['freecells'] as List<dynamic>? ?? const [];
+    final freecells = json['freecells'] as List<dynamic>;
+    if (freecells.length != state.freecells.length) {
+      throw const FormatException('Invalid FreeCell freecells payload.');
+    }
     for (int i = 0; i < state.freecells.length; i++) {
-      if (i >= freecells.length || freecells[i] == null) {
+      if (freecells[i] == null) {
         state.freecells[i] = null;
       } else {
         state.freecells[i] = decodeKlondikeCard(
@@ -86,12 +89,12 @@ class FreeCellGameState {
       }
     }
 
-    final foundations = json['foundations'] as List<dynamic>? ?? const [];
+    final foundations = json['foundations'] as List<dynamic>;
+    if (foundations.length != state.foundations.length) {
+      throw const FormatException('Invalid FreeCell foundations payload.');
+    }
     for (int i = 0; i < state.foundations.length; i++) {
-      _replaceCards(
-        state.foundations[i],
-        i < foundations.length ? _decodePile(foundations[i]) : const [],
-      );
+      _replaceCards(state.foundations[i], _decodePile(foundations[i]));
     }
 
     return state;
@@ -105,9 +108,6 @@ class FreeCellGameState {
       final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) {
         return FreeCellGameState.fromJson(decoded);
-      }
-      if (decoded is Map) {
-        return FreeCellGameState.fromJson(decoded.cast<String, dynamic>());
       }
     } catch (_) {
       return null;

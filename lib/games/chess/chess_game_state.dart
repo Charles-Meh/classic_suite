@@ -4,7 +4,7 @@ enum ChessSide { white, black }
 
 enum ChessPieceType { king, queen, rook, bishop, knight, pawn }
 
-enum ChessGameStatus { active, whiteWon, blackWon, draw, paused }
+enum ChessGameStatus { active, whiteWon, blackWon, draw }
 
 enum ChessGameMode { vsAi, passAndPlay }
 
@@ -105,9 +105,9 @@ class ChessMove {
       promotion: json['promotion'] == null
           ? null
           : ChessPieceType.values.byName(json['promotion'] as String),
-      isCastleKingSide: json['isCastleKingSide'] as bool? ?? false,
-      isCastleQueenSide: json['isCastleQueenSide'] as bool? ?? false,
-      isEnPassant: json['isEnPassant'] as bool? ?? false,
+      isCastleKingSide: json['isCastleKingSide'] as bool,
+      isCastleQueenSide: json['isCastleQueenSide'] as bool,
+      isEnPassant: json['isEnPassant'] as bool,
     );
   }
 
@@ -316,18 +316,18 @@ class ChessGameState {
       message: json['message'] as String,
       mode: ChessGameMode.values.byName(json['mode'] as String),
       difficulty: ChessDifficulty.values.byName(json['difficulty'] as String),
-      moveHistory: (json['moveHistory'] as List<dynamic>? ?? const [])
+      moveHistory: (json['moveHistory'] as List<dynamic>)
           .map(
             (entry) =>
                 ChessHistoryEntry.fromJson(entry as Map<String, dynamic>),
           )
           .toList(),
-      whiteKingMoved: json['whiteKingMoved'] as bool? ?? false,
-      blackKingMoved: json['blackKingMoved'] as bool? ?? false,
-      whiteLeftRookMoved: json['whiteLeftRookMoved'] as bool? ?? false,
-      whiteRightRookMoved: json['whiteRightRookMoved'] as bool? ?? false,
-      blackLeftRookMoved: json['blackLeftRookMoved'] as bool? ?? false,
-      blackRightRookMoved: json['blackRightRookMoved'] as bool? ?? false,
+      whiteKingMoved: json['whiteKingMoved'] as bool,
+      blackKingMoved: json['blackKingMoved'] as bool,
+      whiteLeftRookMoved: json['whiteLeftRookMoved'] as bool,
+      whiteRightRookMoved: json['whiteRightRookMoved'] as bool,
+      blackLeftRookMoved: json['blackLeftRookMoved'] as bool,
+      blackRightRookMoved: json['blackRightRookMoved'] as bool,
       enPassantTarget: json['enPassantTarget'] == null
           ? null
           : ((json['enPassantTarget'] as List<dynamic>)[0] as num).toInt() == -1
@@ -336,13 +336,13 @@ class ChessGameState {
               ((json['enPassantTarget'] as List<dynamic>)[0] as num).toInt(),
               ((json['enPassantTarget'] as List<dynamic>)[1] as num).toInt(),
             ),
-      halfmoveClock: (json['halfmoveClock'] as num?)?.toInt() ?? 0,
-      fullmoveNumber: (json['fullmoveNumber'] as num?)?.toInt() ?? 1,
-      elapsedSeconds: (json['elapsedSeconds'] as num?)?.toInt() ?? 0,
+      halfmoveClock: (json['halfmoveClock'] as num).toInt(),
+      fullmoveNumber: (json['fullmoveNumber'] as num).toInt(),
+      elapsedSeconds: (json['elapsedSeconds'] as num).toInt(),
       lastMove: json['lastMove'] == null
           ? null
           : ChessMove.fromJson(json['lastMove'] as Map<String, dynamic>),
-      showHint: json['showHint'] as bool? ?? false,
+      showHint: json['showHint'] as bool,
       selectedSquare: json['selectedSquare'] == null
           ? null
           : (
@@ -352,7 +352,7 @@ class ChessGameState {
       hintMove: json['hintMove'] == null
           ? null
           : ChessMove.fromJson(json['hintMove'] as Map<String, dynamic>),
-      resultRecorded: json['resultRecorded'] as bool? ?? false,
+      resultRecorded: json['resultRecorded'] as bool,
     );
   }
 
@@ -459,13 +459,11 @@ class ChessGameState {
     );
   }
 
-  bool get isPaused => status == ChessGameStatus.paused;
   bool get isFinished =>
       status == ChessGameStatus.whiteWon ||
       status == ChessGameStatus.blackWon ||
       status == ChessGameStatus.draw;
   bool get isHumanTurn =>
-      !isPaused &&
       !isFinished &&
       (mode == ChessGameMode.passAndPlay || turn == ChessSide.white);
   ChessSide get aiSide => ChessSide.black;
@@ -473,20 +471,12 @@ class ChessGameState {
   ChessPiece? pieceAt(int row, int col) => board[row][col];
 
   ChessGameState incrementElapsed() {
-    if (isPaused || isFinished) return this;
+    if (isFinished) return this;
     return copyWith(elapsedSeconds: elapsedSeconds + 1);
   }
 
-  ChessGameState togglePause() {
-    if (isFinished) return this;
-    return copyWith(
-      status: isPaused ? ChessGameStatus.active : ChessGameStatus.paused,
-      message: isPaused ? '${turn.name.capitalize()} to move.' : 'Game paused.',
-    );
-  }
-
   ChessGameState selectSquare(int row, int col) {
-    if (isPaused || isFinished) return this;
+    if (isFinished) return this;
     final piece = pieceAt(row, col);
     if (piece == null || piece.side != turn) {
       return copyWith(clearSelectedSquare: true, clearHint: true);

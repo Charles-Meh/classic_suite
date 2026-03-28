@@ -123,7 +123,7 @@ class _CheckersGameState extends State<CheckersGame>
 
   void _syncTimers() {
     _ticker?.cancel();
-    if (_loading || state.isPaused || state.isFinished) return;
+    if (_loading || state.isFinished) return;
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!mounted) return;
       setState(() => state = state.incrementElapsed());
@@ -133,7 +133,7 @@ class _CheckersGameState extends State<CheckersGame>
 
   void _maybeRunAi() {
     _aiTimer?.cancel();
-    if (!mounted || _loading || state.isPaused || state.isFinished) return;
+    if (!mounted || _loading || state.isFinished) return;
     if (state.mode != CheckersGameMode.vsAi ||
         state.turn != CheckersSide.black) {
       return;
@@ -190,7 +190,7 @@ class _CheckersGameState extends State<CheckersGame>
   }
 
   Future<void> _undo() async {
-    if (_undoStack.isEmpty || state.isPaused) return;
+    if (_undoStack.isEmpty) return;
     var previous = _undoStack.removeLast();
     if (state.mode == CheckersGameMode.vsAi &&
         previous.turn == CheckersSide.black &&
@@ -219,17 +219,6 @@ class _CheckersGameState extends State<CheckersGame>
     );
     await _recordStartedGame();
   }
-
-  Future<void> _setMode(CheckersGameMode mode) async {
-    _undoStack.clear();
-    _hasRecordedStart = false;
-    await _applyState(
-      CheckersGameState.newGame(mode: mode, difficulty: state.difficulty),
-    );
-    await _recordStartedGame();
-  }
-
-  Future<void> _togglePause() async => _applyState(state.togglePause());
 
   Future<bool> _confirmNewGame() async {
     final confirmed = await showDialog<bool>(
@@ -335,7 +324,7 @@ class _CheckersGameState extends State<CheckersGame>
                       'Kings can move and capture backward. Reaching the back rank crowns a piece.',
                       'Easy/Medium/Hard adjust the AI minimax depth: 2 / 4 / 6 plies.',
                       'Undo rolls back one full turn versus the AI, or one move in pass-and-play.',
-                      'The game auto-saves, so pausing and resuming works naturally if you leave and come back.',
+                      'The game auto-saves when you leave and restores when you come back.',
                     ],
                   ),
                 ],
@@ -353,6 +342,124 @@ class _CheckersGameState extends State<CheckersGame>
     );
   }
 
+  Future<void> _showSettings() async {
+    final result =
+        await showModalBottomSheet<(CheckersGameMode, CheckersDifficulty)>(
+          context: context,
+          showDragHandle: true,
+          builder: (context) {
+            var selectedMode = state.mode;
+            var selectedDifficulty = state.difficulty;
+            return StatefulBuilder(
+              builder: (context, setModalState) => SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Checkers settings',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Mode',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Vs AI'),
+                            selected: selectedMode == CheckersGameMode.vsAi,
+                            onSelected: (_) {
+                              setModalState(() {
+                                selectedMode = CheckersGameMode.vsAi;
+                              });
+                            },
+                          ),
+                          ChoiceChip(
+                            label: const Text('Pass & play'),
+                            selected:
+                                selectedMode == CheckersGameMode.passAndPlay,
+                            onSelected: (_) {
+                              setModalState(() {
+                                selectedMode = CheckersGameMode.passAndPlay;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'AI difficulty',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final difficulty in CheckersDifficulty.values)
+                            ChoiceChip(
+                              label: Text(difficulty.label),
+                              selected: selectedDifficulty == difficulty,
+                              onSelected: selectedMode == CheckersGameMode.vsAi
+                                  ? (_) {
+                                      setModalState(() {
+                                        selectedDifficulty = difficulty;
+                                      });
+                                    }
+                                  : null,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                          const Spacer(),
+                          FilledButton(
+                            onPressed: () => Navigator.of(
+                              context,
+                            ).pop((selectedMode, selectedDifficulty)),
+                            child: const Text('Apply'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+
+    if (result == null) {
+      return;
+    }
+
+    final (mode, difficulty) = result;
+    if (mode != state.mode) {
+      _undoStack.clear();
+      _hasRecordedStart = false;
+      await _applyState(
+        CheckersGameState.newGame(mode: mode, difficulty: difficulty),
+      );
+      await _recordStartedGame();
+      return;
+    }
+    if (difficulty != state.difficulty) {
+      await _setDifficulty(difficulty);
+    }
+  }
+
   Widget _buildTopPanel(BuildContext context) {
     return Card(
       child: Padding(
@@ -360,78 +467,24 @@ class _CheckersGameState extends State<CheckersGame>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    state.mode == CheckersGameMode.vsAi
-                        ? 'Checkers • ${state.difficulty.label} AI'
-                        : 'Checkers • Pass & play',
-                    key: const Key('checkers_title'),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                Text(
+                  'Checkers',
+                  key: const Key('checkers_title'),
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                IconButton(
-                  key: const Key('checkers_undo'),
-                  tooltip: 'Undo',
-                  onPressed: _undoStack.isEmpty ? null : _undo,
-                  icon: const Icon(Icons.undo),
-                ),
-                IconButton(
-                  key: const Key('checkers_pause'),
-                  tooltip: state.isPaused ? 'Resume' : 'Pause',
-                  onPressed: _togglePause,
-                  icon: Icon(state.isPaused ? Icons.play_arrow : Icons.pause),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Game menu',
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'new':
-                        await _newGame();
-                      case 'stats':
-                        await _showStats();
-                      case 'help':
-                        await _showHelp();
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'new', child: Text('New game')),
-                    PopupMenuItem(value: 'stats', child: Text('Statistics')),
-                    PopupMenuItem(value: 'help', child: Text('Rules / help')),
-                  ],
+                const SizedBox(height: 4),
+                Text(
+                  state.mode == CheckersGameMode.vsAi
+                      ? '${state.difficulty.label} AI'
+                      : 'Pass & play',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ChoiceChip(
-                  key: const Key('checkers_mode_ai'),
-                  label: const Text('Vs AI'),
-                  selected: state.mode == CheckersGameMode.vsAi,
-                  onSelected: (_) => _setMode(CheckersGameMode.vsAi),
-                ),
-                ChoiceChip(
-                  key: const Key('checkers_mode_local'),
-                  label: const Text('Pass & play'),
-                  selected: state.mode == CheckersGameMode.passAndPlay,
-                  onSelected: (_) => _setMode(CheckersGameMode.passAndPlay),
-                ),
-                for (final difficulty in CheckersDifficulty.values)
-                  ChoiceChip(
-                    key: Key('checkers_difficulty_${difficulty.name}'),
-                    label: Text(difficulty.label),
-                    selected: state.difficulty == difficulty,
-                    onSelected: state.mode == CheckersGameMode.vsAi
-                        ? (_) => _setDifficulty(difficulty)
-                        : null,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
             GameStatsRow(
               dark: false,
               items: [
@@ -522,52 +575,6 @@ class _CheckersGameState extends State<CheckersGame>
     );
   }
 
-  Widget _buildHistory(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Move history',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            if (state.moveHistory.isEmpty)
-              Text(
-                'No moves yet.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              )
-            else
-              SizedBox(
-                height: 220,
-                child: ListView.builder(
-                  itemCount: (state.moveHistory.length / 2).ceil(),
-                  itemBuilder: (context, index) {
-                    final red = state.moveHistory[index * 2];
-                    final black = index * 2 + 1 < state.moveHistory.length
-                        ? state.moveHistory[index * 2 + 1]
-                        : null;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          SizedBox(width: 36, child: Text('${index + 1}.')),
-                          Expanded(child: Text(red.notation)),
-                          Expanded(child: Text(black?.notation ?? '')),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   bool get _playerWon => state.status == CheckersGameStatus.redWon;
 
   void _backToMenu() {
@@ -608,18 +615,10 @@ class _CheckersGameState extends State<CheckersGame>
         leading: const BackButton(),
         centerTitle: true,
         title: const Text('Checkers'),
-        actions: [
-          IconButton(
-            tooltip: 'Help',
-            onPressed: _showHelp,
-            icon: const Icon(Icons.help_outline_rounded),
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: _togglePause,
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
+        actions: buildGameAppBarActions(
+          onHelp: _showHelp,
+          onSettings: _showSettings,
+        ),
       ),
       bottomNavigationBar: _loading
           ? null
@@ -634,65 +633,28 @@ class _CheckersGameState extends State<CheckersGame>
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final landscape = constraints.maxWidth > 900;
-                  final board = _buildBoard(context);
-                  final sidePanel = Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildTopPanel(context),
-                      const SizedBox(height: 16),
-                      _buildHistory(context),
-                    ],
-                  );
-                  return Stack(
-                    children: [
-                      landscape
-                          ? Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 1250,
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      Expanded(flex: 7, child: board),
-                                      const SizedBox(width: 16),
-                                      Expanded(flex: 5, child: sidePanel),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            )
-                          : SingleChildScrollView(
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 1250,
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        board,
-                                        const SizedBox(height: 16),
-                                        sidePanel,
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                      if (_playerWon) _buildWinOverlay(),
-                    ],
-                  );
-                },
+              child: Stack(
+                children: [
+                  SingleChildScrollView(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 980),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildTopPanel(context),
+                              const SizedBox(height: 16),
+                              _buildBoard(context),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_playerWon) _buildWinOverlay(),
+                ],
               ),
             ),
     );

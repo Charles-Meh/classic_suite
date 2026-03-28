@@ -12,6 +12,8 @@ void main() {
   });
 
   testWidgets('saved state restores on launch', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1600));
+
     final saved = HeartsGameState.debug(
       hands: [
         const [HeartsCard(HeartsSuit.clubs, 2)],
@@ -45,6 +47,8 @@ void main() {
   testWidgets('passing flow selects 3 cards and enables confirm', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1600));
+
     final state = HeartsGameState.debug(
       hands: [
         const [

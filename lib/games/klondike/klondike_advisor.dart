@@ -272,9 +272,17 @@ class KlondikeAdvisor {
     required List<KlondikeCard> cards,
   }) {
     final targetPile = state.tableau[targetPileIndex];
-    if (targetPile.isEmpty &&
-        cards.length == 1 &&
-        cards.first.card.value == CardValue.king) {
+    if (targetPile.isEmpty && cards.first.card.value == CardValue.king) {
+      if (source.zone == KlondikeLocationZone.tableau) {
+        final sourcePile = state.tableau[source.pileIndex!];
+        final sourceCardIndex = source.cardIndex!;
+
+        // Moving a king-led stack to another empty tableau is redundant unless
+        // it exposes a face-down card in the source pile.
+        if (sourceCardIndex > 0 && !sourcePile[sourceCardIndex - 1].faceUp) {
+          return false;
+        }
+      }
       return true;
     }
 

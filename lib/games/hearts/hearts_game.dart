@@ -162,10 +162,7 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
 
   void _driveAi() {
     _aiTimer?.cancel();
-    if (!mounted ||
-        !state.isPlaying ||
-        state.isPaused ||
-        state.currentPlayer == 0) {
+    if (!mounted || !state.isPlaying || state.currentPlayer == 0) {
       return;
     }
     _aiTimer = Timer(_aiDelay, () async {
@@ -175,10 +172,6 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
       final nextState = state.autoPlayCurrentPlayer();
       await _applyState(nextState);
     });
-  }
-
-  Future<void> _togglePause() async {
-    await _applyState(state.togglePause());
   }
 
   Future<void> _setSpeed(HeartsSpeed speed) async {
@@ -201,7 +194,7 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
   }
 
   Future<void> _undo() async {
-    if (_history.isEmpty || state.isPaused) {
+    if (_history.isEmpty) {
       return;
     }
     final previous = _history.removeLast();
@@ -305,6 +298,111 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSettings() async {
+    final result = await showModalBottomSheet<HeartsSpeed>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        var selectedSpeed = state.speed;
+        return StatefulBuilder(
+          builder: (context, setModalState) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Hearts settings',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Play speed',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final speed in HeartsSpeed.values)
+                        ChoiceChip(
+                          label: Text(switch (speed) {
+                            HeartsSpeed.instant => 'Fast',
+                            HeartsSpeed.normal => 'Normal',
+                            HeartsSpeed.relaxed => 'Relaxed',
+                          }),
+                          selected: selectedSpeed == speed,
+                          onSelected: (_) {
+                            setModalState(() {
+                              selectedSpeed = speed;
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () =>
+                            Navigator.of(context).pop(selectedSpeed),
+                        child: const Text('Apply'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result != null && result != state.speed) {
+      await _setSpeed(result);
+    }
+  }
+
+  Widget _buildHeaderStats() {
+    final phaseLabel = switch (state.phase) {
+      HeartsPhase.passing => state.passDirectionLabel,
+      HeartsPhase.playing =>
+        state.heartsBroken ? 'Hearts broken' : 'Opening tricks',
+      HeartsPhase.roundComplete => 'Round complete',
+      HeartsPhase.matchComplete => 'Match complete',
+    };
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      child: GameStatsRow(
+        items: [
+          GameStatItem(
+            label: 'Hand',
+            value: '${state.handNumber + 1}',
+            icon: Icons.style_outlined,
+          ),
+          GameStatItem(
+            label: 'You',
+            value: '${state.matchScores[0]} pts',
+            icon: Icons.favorite_outline,
+          ),
+          GameStatItem(
+            label: 'Phase',
+            value: phaseLabel,
+            icon: Icons.timeline_rounded,
           ),
         ],
       ),
@@ -583,16 +681,9 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
   ) {
     final isSelected = state.selectedPassCards.contains(card.key);
     final isPlayable =
-        !isPassing &&
-        legal.contains(card.key) &&
-        state.isHumanTurn &&
-        !state.isPaused;
+        !isPassing && legal.contains(card.key) && state.isHumanTurn;
     final isDimmed =
-        !isPassing &&
-        state.isPlaying &&
-        state.isHumanTurn &&
-        !isPlayable &&
-        !state.isPaused;
+        !isPassing && state.isPlaying && state.isHumanTurn && !isPlayable;
     final yOffset = isSelected ? -20.0 : (isDimmed ? 8.0 : 0.0);
 
     return AnimatedPositioned(
@@ -602,9 +693,7 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
       top: yOffset + 22,
       child: GestureDetector(
         onTap: () {
-          if (state.isPaused ||
-              state.isRoundComplete ||
-              state.isMatchComplete) {
+          if (state.isRoundComplete || state.isMatchComplete) {
             return;
           }
           if (isPassing) {
@@ -652,7 +741,7 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
               message: 'Undo',
               child: IconButton.filledTonal(
                 key: const Key('hearts_undo'),
-                onPressed: _history.isEmpty || state.isPaused ? null : _undo,
+                onPressed: _history.isEmpty ? null : _undo,
                 icon: const Icon(Icons.undo),
               ),
             ),
@@ -721,57 +810,10 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
         title: const Text('Hearts'),
         backgroundColor: const Color(0xFF14532D),
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            tooltip: 'Help',
-            onPressed: _showRules,
-            icon: const Icon(Icons.help_outline_rounded),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Game menu',
-            icon: const Icon(Icons.more_vert),
-            onSelected: (value) async {
-              switch (value) {
-                case 'new':
-                  await _confirmAndStartNewMatch();
-                case 'stats':
-                  await _showStats();
-                case 'pause':
-                  await _togglePause();
-                case 'speed_instant':
-                  await _setSpeed(HeartsSpeed.instant);
-                case 'speed_normal':
-                  await _setSpeed(HeartsSpeed.normal);
-                case 'speed_relaxed':
-                  await _setSpeed(HeartsSpeed.relaxed);
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'new', child: Text('New match')),
-              const PopupMenuItem(value: 'stats', child: Text('Statistics')),
-              PopupMenuItem(
-                value: 'pause',
-                child: Text(state.isPaused ? 'Resume' : 'Pause'),
-              ),
-              const PopupMenuDivider(),
-              CheckedPopupMenuItem(
-                value: 'speed_instant',
-                checked: state.speed == HeartsSpeed.instant,
-                child: const Text('Fast'),
-              ),
-              CheckedPopupMenuItem(
-                value: 'speed_normal',
-                checked: state.speed == HeartsSpeed.normal,
-                child: const Text('Normal'),
-              ),
-              CheckedPopupMenuItem(
-                value: 'speed_relaxed',
-                checked: state.speed == HeartsSpeed.relaxed,
-                child: const Text('Relaxed'),
-              ),
-            ],
-          ),
-        ],
+        actions: buildGameAppBarActions(
+          onHelp: _showRules,
+          onSettings: _showSettings,
+        ),
       ),
       bottomNavigationBar: _loading ? null : _buildBottomBar(),
       body: _loading
@@ -788,6 +830,7 @@ class _HeartsGameState extends State<HeartsGame> with WidgetsBindingObserver {
                 children: [
                   Column(
                     children: [
+                      _buildHeaderStats(),
                       _buildScoreStrip(),
                       _buildTableCenter(),
                       _buildPlayerHand(),

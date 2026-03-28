@@ -1003,18 +1003,10 @@ class _FreeCellGameState extends State<FreeCellGame> {
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
         centerTitle: true,
         title: const Text('FreeCell'),
-        actions: [
-          IconButton(
-            tooltip: 'Help',
-            onPressed: _openHelp,
-            icon: const Icon(Icons.help_outline),
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: _openSettings,
-            icon: const Icon(Icons.settings),
-          ),
-        ],
+        actions: buildGameAppBarActions(
+          onHelp: _openHelp,
+          onSettings: _openSettings,
+        ),
       ),
       bottomNavigationBar: GameBottomBar(
         onUndo: _history.isEmpty ? null : _undo,

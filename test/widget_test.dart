@@ -6,6 +6,7 @@ import 'package:classic_suite/core/game_list_page.dart';
 import 'package:classic_suite/games/klondike/card_model.dart';
 import 'package:classic_suite/games/klondike/game_state.dart';
 import 'package:classic_suite/games/klondike/klondike_advisor.dart';
+import 'package:classic_suite/games/klondike/klondike_autocomplete.dart';
 import 'package:classic_suite/games/klondike/klondike_game.dart';
 import 'package:classic_suite/games/klondike/solver.dart';
 import 'package:classic_suite/games/klondike/winnable_seed_data.dart';
@@ -41,7 +42,7 @@ Future<void> _applyKlondikeSettings(
   required String drawMode,
   required String dealType,
 }) async {
-  await tester.tap(find.byIcon(Icons.settings));
+  await tester.tap(find.byTooltip('Settings'));
   await tester.pumpAndSettle();
 
   await tester.tap(find.text(drawMode));
@@ -204,15 +205,7 @@ void main() {
   testWidgets('hint button shows only visual suggestion markers', (
     WidgetTester tester,
   ) async {
-    final state = GameState();
-    state.stock.clear();
-    state.waste.clear();
-    for (final pile in state.foundations) {
-      pile.clear();
-    }
-    for (final pile in state.tableau) {
-      pile.clear();
-    }
+    final state = _emptyKlondikeState();
 
     state.waste.add(
       KlondikeCard(PlayingCard(Suit.hearts, CardValue.six), faceUp: true),
@@ -233,16 +226,61 @@ void main() {
     expect(find.byKey(const Key('tableau_0_drop_hint')), findsOneWidget);
   });
 
+  testWidgets('autocomplete button stays hidden with covered tableau cards', (
+    WidgetTester tester,
+  ) async {
+    final hiddenState = _emptyKlondikeState();
+    hiddenState.tableau[0].add(
+      KlondikeCard(PlayingCard(Suit.spades, CardValue.king), faceUp: false),
+    );
+
+    await tester.pumpWidget(_buildKlondikeHarness(hiddenState));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('autocomplete_prompt')), findsNothing);
+    expect(find.byKey(const Key('autocomplete_button')), findsNothing);
+  });
+
+  testWidgets('autocomplete prompt can be dismissed without running', (
+    WidgetTester tester,
+  ) async {
+    final state = _buildAutocompleteReadyState();
+
+    await tester.pumpWidget(_buildKlondikeHarness(state));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('autocomplete_prompt')), findsOneWidget);
+    expect(find.byKey(const Key('autocomplete_button')), findsOneWidget);
+
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('autocomplete_prompt')), findsNothing);
+    expect(find.byKey(const Key('autocomplete_button')), findsNothing);
+    expect(find.byKey(const Key('win_overlay')), findsNothing);
+  });
+
+  testWidgets('autocomplete prompt appears and runs for revealed endgames', (
+    WidgetTester tester,
+  ) async {
+    final state = _buildAutocompleteReadyState();
+
+    await tester.pumpWidget(_buildKlondikeHarness(state));
+    await tester.pumpAndSettle();
+
+    expect(KlondikeAutocomplete.canAutocomplete(state), isTrue);
+    expect(find.byKey(const Key('autocomplete_prompt')), findsOneWidget);
+    expect(find.byKey(const Key('autocomplete_button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('autocomplete_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('win_overlay')), findsOneWidget);
+    expect(find.byKey(const Key('autocomplete_button')), findsNothing);
+  });
+
   test('advisor tap prefers foundation over tableau when both are valid', () {
-    final state = GameState();
-    state.stock.clear();
-    state.waste.clear();
-    for (final pile in state.foundations) {
-      pile.clear();
-    }
-    for (final pile in state.tableau) {
-      pile.clear();
-    }
+    final state = _emptyKlondikeState();
 
     state.foundationForSuit(Suit.hearts).addAll([
       KlondikeCard(PlayingCard(Suit.hearts, CardValue.ace), faceUp: true),
@@ -266,15 +304,7 @@ void main() {
   });
 
   test('advisor tap ignores tableau-only moves', () {
-    final state = GameState();
-    state.stock.clear();
-    state.waste.clear();
-    for (final pile in state.foundations) {
-      pile.clear();
-    }
-    for (final pile in state.tableau) {
-      pile.clear();
-    }
+    final state = _emptyKlondikeState();
 
     final sixHearts = KlondikeCard(
       PlayingCard(Suit.hearts, CardValue.six),
@@ -291,15 +321,7 @@ void main() {
   });
 
   test('advisor skips redundant tableau tap moves on already valid runs', () {
-    final state = GameState();
-    state.stock.clear();
-    state.waste.clear();
-    for (final pile in state.foundations) {
-      pile.clear();
-    }
-    for (final pile in state.tableau) {
-      pile.clear();
-    }
+    final state = _emptyKlondikeState();
 
     state.tableau[0].addAll([
       KlondikeCard(PlayingCard(Suit.spades, CardValue.king), faceUp: true),
@@ -318,3 +340,74 @@ void main() {
     expect(move, isNull);
   });
 }
+
+GameState _emptyKlondikeState() {
+  final state = GameState();
+  state.stock.clear();
+  state.waste.clear();
+  for (final pile in state.foundations) {
+    pile.clear();
+  }
+  for (final pile in state.tableau) {
+    pile.clear();
+  }
+  return state;
+}
+
+GameState _buildAutocompleteReadyState() {
+  final state = _emptyKlondikeState();
+
+  for (final suit in [Suit.clubs, Suit.diamonds, Suit.hearts]) {
+    _addFoundationRange(state, suit, _allKlondikeValues);
+  }
+  _addFoundationRange(state, Suit.spades, _allKlondikeValuesWithoutKing);
+
+  state.tableau[0].add(
+    KlondikeCard(PlayingCard(Suit.spades, CardValue.king), faceUp: true),
+  );
+
+  return state;
+}
+
+void _addFoundationRange(
+  GameState state,
+  Suit suit,
+  Iterable<CardValue> values,
+) {
+  for (final value in values) {
+    state
+        .foundationForSuit(suit)
+        .add(KlondikeCard(PlayingCard(suit, value), faceUp: true));
+  }
+}
+
+const List<CardValue> _allKlondikeValues = [
+  CardValue.ace,
+  CardValue.two,
+  CardValue.three,
+  CardValue.four,
+  CardValue.five,
+  CardValue.six,
+  CardValue.seven,
+  CardValue.eight,
+  CardValue.nine,
+  CardValue.ten,
+  CardValue.jack,
+  CardValue.queen,
+  CardValue.king,
+];
+
+const List<CardValue> _allKlondikeValuesWithoutKing = [
+  CardValue.ace,
+  CardValue.two,
+  CardValue.three,
+  CardValue.four,
+  CardValue.five,
+  CardValue.six,
+  CardValue.seven,
+  CardValue.eight,
+  CardValue.nine,
+  CardValue.ten,
+  CardValue.jack,
+  CardValue.queen,
+];

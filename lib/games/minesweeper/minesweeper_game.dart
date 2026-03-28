@@ -775,18 +775,10 @@ class _MinesweeperGameState extends State<MinesweeperGame>
         leading: const BackButton(),
         centerTitle: true,
         title: const Text('Minesweeper'),
-        actions: [
-          IconButton(
-            tooltip: 'Help',
-            onPressed: _showHowToPlay,
-            icon: const Icon(Icons.help_outline_rounded),
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: _showSettings,
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
+        actions: buildGameAppBarActions(
+          onHelp: _showHowToPlay,
+          onSettings: _showSettings,
+        ),
       ),
       bottomNavigationBar: _loading
           ? null
